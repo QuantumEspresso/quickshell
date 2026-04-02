@@ -7,8 +7,8 @@ import "../colors" as ColorsModule
 Item {
     id: root
 
-    implicitWidth:  740
-    implicitHeight: 310
+    implicitWidth:  450
+    implicitHeight: 500
     focus: true
     property int  totalSeconds:     0
     property int  remainingSeconds: 0
