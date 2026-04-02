@@ -102,6 +102,6 @@ ColumnLayout {
 
     Component {
         id: screenManager
-        TimerComponent {}
+        ScreenManager {}
     }
 }
