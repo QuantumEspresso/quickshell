@@ -23,8 +23,11 @@ Item {
     // STATE & MATH
     // -------------------------------------------------------------------------
     property int activeEditIndex: 0
-    property real uiScale: 0.10 
-    
+    property real uiScale: 0.10
+
+    // staring values for restoration purposes
+    property var initialSnapshot: []
+
     // Dynamically tracks whichever monitor is NOT currently selected
     property int stationaryIndex: monitorsModel.count === 2 ? (activeEditIndex === 0 ? 1 : 0) : 0
     
@@ -59,7 +62,10 @@ Item {
     property real uiYOffset: 25
     property real screenLight: 0.0
 
-    Component.onCompleted: startupAnim.start()
+    Component.onCompleted: {
+        startupAnim.start()
+        updateResolutionSelector()
+    }
 
     ParallelAnimation {
         id: startupAnim
@@ -80,7 +86,6 @@ Item {
 
     onActiveEditIndexChanged: {
 	menuTransitionAnim.restart();
-	updateResolutionSelector();
     }
 
     // MATHEMATICAL PERIMETER GLUE: Forces a proposed coordinate to perfectly touch the stationary monitor
@@ -161,21 +166,41 @@ Item {
         monitorsModel.setProperty(idx, "uiY", best.y)
     }
 
+
     function updateResolutionSelector() {
-        if (window.activeEditIndex < 0) return;
-        let monitor = monitorsModel.get(window.activeEditIndex);
-        if (!monitor || !monitor.availableRes) return;
-   
-        for (let i = 0; i < monitor.availableRes.length; i++) {
-            let r = monitor.availableRes[i];
-            if (r.width === monitor.resW &&
-                r.height === monitor.resH &&
-                Math.round(r.refresh) === Math.round(monitor.rate)) {
-                resolutionSelector.currentIndex = i;
-                return;
+        if (window.activeEditIndex < 0) return
+ 
+        let monitor = monitorsModel.get(window.activeEditIndex)
+        if (!monitor || !monitor.availableRes) {
+            resolutionSelector.parsedList = []
+            resolutionSelector.currentIndex = -1
+            return
+        }
+ 
+        let list
+        try { list = JSON.parse(monitor.availableRes) }
+        catch(e) { list = [] }
+ 
+        resolutionSelector.parsedList = list
+ 
+        // ustaw aktualny index
+        for (let i = 0; i < list.length; i++) {
+            let mode = list[i]
+            if (!mode) continue
+            let match = mode.match(/(\d+)x(\d+)@([\d.]+)/)
+            if (!match) continue
+ 
+            let w = parseInt(match[1])
+            let h = parseInt(match[2])
+            let r = parseFloat(match[3])
+ 
+            if (w === monitor.resW && h === monitor.resH && Math.round(r) === Math.round(monitor.rate)) {
+                resolutionSelector.currentIndex = i
+                return
             }
         }
-        resolutionSelector.currentIndex = -1; // fallback
+ 
+        resolutionSelector.currentIndex = -1
     }
 
     function enabledIndices() {
@@ -185,6 +210,79 @@ Item {
             if (!m.disabled) arr.push(i)
         }
         return arr
+    }
+
+    function takeSnapshot() {
+        initialSnapshot = []
+        for (let i = 0; i < monitorsModel.count; i++) {
+            initialSnapshot.push(JSON.parse(JSON.stringify(monitorsModel.get(i))))
+        }
+    }
+
+    function restoreSnapshot() {
+        if (!initialSnapshot || initialSnapshot.length === 0)
+            return
+
+        monitorsModel.clear()
+        for (let i = 0; i < initialSnapshot.length; i++) {
+            monitorsModel.append(initialSnapshot[i])
+        }
+
+        delayedLayoutUpdate.restart()
+    }
+
+    function applyConfiguration() {
+        for (let i = 0; i < monitorsModel.count; i++) {
+            let m = monitorsModel.get(i)
+ 
+            let x = Math.round(m.uiX / uiScale) + originalLayoutOriginX
+            let y = Math.round(m.uiY / uiScale) + originalLayoutOriginY
+ 
+            let cmd
+ 
+            if (m.disabled) {
+                cmd = `${m.name},disable`
+            } else {
+                cmd =
+                    `${m.name},${m.resW}x${m.resH}@${Math.round(m.rate)},` +
+                    `${x}x${y},${m.scale}`
+            }
+ 
+            applyProc.command = ["hyprctl", "keyword", "monitor", cmd]
+            applyProc.running = true
+        }
+    }
+
+    function buildKanshiProfile() {
+        let profile = "profile auto {\n"
+ 
+        for (let i = 0; i < monitorsModel.count; i++) {
+            let m = monitorsModel.get(i)
+            if (m.disabled) continue
+ 
+            let x = Math.round(m.uiX / uiScale)
+            let y = Math.round(m.uiY / uiScale)
+ 
+            profile +=
+                `  output ${m.name} ` +
+                `mode ${m.resW}x${m.resH}@${Math.round(m.rate)}Hz ` +
+                `position ${x},${y} ` +
+                `scale ${m.scale}\n`
+        }
+ 
+        profile += "}\n"
+        return profile
+    }
+
+    function saveConfiguration() {
+        let profile = buildKanshiProfile()
+ 
+        saveKanshiProc.command = [
+            "bash",
+            "-c",
+            `mkdir -p ~/.config/kanshi && echo '${profile}' > ~/.config/kanshi/config`
+        ]
+        saveKanshiProc.running = true
     }
 
     Timer {
@@ -234,25 +332,27 @@ Item {
                             disabled: data[i].disabled || false,
 			    scale: data[i].scale || 1.0,
 			    description: data[i].description || data[i].name,
-			    availableRes: (data[i].availableModes || []).map(function(m) {
-                                let match = m.match(/(\d+)x(\d+)@([\d.]+)Hz/)
-                                if (!match) return null
-                            
-                                return {
-                                    width: parseInt(match[1]),
-                                    height: parseInt(match[2]),
-                                    refresh: parseFloat(match[3])
-                                }
-                            }).filter(function(v){ return v !== null })
+			    availableRes: JSON.stringify(data[i].availableModes || [])
                         });
 
                         if (data[i].focused) window.activeEditIndex = i;
                     }
                     updateResolutionSelector();
-                    window.forceLayoutUpdate();
+		    window.forceLayoutUpdate();
+		    window.takeSnapshot();
                 } catch(e) {}
             }
         }
+    }
+
+    Process {
+	id: applyProc
+	running: false
+    }
+
+    Process {
+        id: saveKanshiProc
+	running: false
     }
 
     // -------------------------------------------------------------------------
@@ -279,7 +379,7 @@ Item {
  
                 Button {
                     Layout.preferredWidth: 70
-                    onClicked: {}
+                    onClicked: window.applyConfiguration()
  
                     contentItem: Text {
                         text: "Apply"
@@ -297,7 +397,7 @@ Item {
  
                 Button {
                     Layout.preferredWidth: 70
-                    onClicked: {}
+                    onClicked: window.saveConfiguration()
  
                     contentItem: Text {
                         text: "Save"
@@ -315,7 +415,7 @@ Item {
  
                 Button {
                     Layout.preferredWidth: 80
-                    onClicked: {}
+                    onClicked: window.restoreSnapshot()
  
                     contentItem: Text {
                         text: "Restore"
@@ -381,177 +481,6 @@ Item {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: 20
-  
-                        // --------------------------------------------------
-                        // MODE 1: SINGLE MONITOR
-                        // --------------------------------------------------
-                        Item {
-                            anchors.fill: parent
-                            visible: monitorsModel.count === 1
-  
-                            Item {
-                                id: singleMonitorZoom
-                                anchors.centerIn: parent
-                                width: 380
-                                height: 280
-                                
-                                property real baseScale: Math.min(1.0, 2200 / window.currentSimW)
-                                scale: baseScale * window.monitorScale
-                                opacity: window.introProgress
-                                Behavior on baseScale { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
-  
-                                Rectangle {
-                                    id: deskSurface
-                                    width: 1000
-                                    height: 14
-                                    radius: 6
-                                    anchors.top: standBase.bottom
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: window.mantle
-                                    border.color: window.surface0
-                                    border.width: 1
-  
-                                    Rectangle { 
-                                        width: 24
-                                        height: 350
-                                        radius: 4
-                                        color: window.crust
-                                        anchors.top: parent.bottom
-                                        anchors.topMargin: -5
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 100
-                                        z: -1 
-                                    }
-                                    Rectangle { 
-                                        width: 24
-                                        height: 350
-                                        radius: 4
-                                        color: window.crust
-                                        anchors.top: parent.bottom
-                                        anchors.topMargin: -5
-                                        anchors.right: parent.right
-                                        anchors.rightMargin: 100
-                                        z: -1 
-                                    }
-                                }
-  
-                                Rectangle {
-                                    id: standBase
-                                    width: 130
-                                    height: 8
-                                    radius: 4
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: 20
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: window.surface1
-                                }
-                                
-                                Rectangle {
-                                    id: standNeck
-                                    width: 34
-                                    height: 70
-                                    anchors.bottom: standBase.top
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: window.surface0
-                                    Rectangle { 
-                                        width: 10
-                                        height: 30
-                                        radius: 5
-                                        anchors.centerIn: parent
-                                        color: window.base 
-                                    }
-                                }
-  
-                                Rectangle {
-                                    id: screenBezel
-                                    width: 140 + (180 * (window.currentSimW / 1920))
-                                    height: 90 + (90 * (window.currentSimH / 1080))
-                                    anchors.bottom: standNeck.top
-                                    anchors.bottomMargin: -10
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    radius: 12
-                                    color: window.crust
-                                    border.color: window.surface2
-                                    border.width: 2
-                                    
-                                    Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
-                                    Behavior on height { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
-  
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        anchors.margins: 10
-                                        radius: 6
-                                        color: window.surface0
-                                        clip: true
-  
-                                        // This inner block handles the "powering on" visual delay
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "transparent"
-                                            opacity: window.screenLight
-                                            
-                                            gradient: Gradient {
-                                                orientation: Gradient.Vertical
-                                                GradientStop { 
-                                                    position: 0.0
-                                                    color: Qt.tint(window.surface0, Qt.alpha(window.selectedResAccent, 0.15))
-                                                    Behavior on color { ColorAnimation { duration: 400 } } 
-                                                }
-                                                GradientStop { 
-                                                    position: 1.0
-                                                    color: Qt.tint(window.surface0, Qt.alpha(window.selectedRateAccent, 0.1))
-                                                    Behavior on color { ColorAnimation { duration: 400 } } 
-                                                }
-                                            }
-                                            
-                                            Grid { 
-                                                anchors.centerIn: parent
-                                                rows: 10
-                                                columns: 15
-                                                spacing: 20
-                                                Repeater { 
-                                                    model: 150
-                                                    Rectangle { width: 2; height: 2; radius: 1; color: Qt.alpha(window.text, 0.1) } 
-                                                } 
-                                            }
-  
-                                            Item {
-                                                anchors.centerIn: parent
-                                                scale: 1.0 / singleMonitorZoom.scale
-                                                
-                                                ColumnLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 4
-                                                    Text { 
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        font.family: "Iosevka Nerd Font"
-                                                        font.pixelSize: 38
-                                                        color: window.selectedResAccent
-                                                        text: "󰍹"
-                                                        Behavior on color { ColorAnimation { duration: 400 } } 
-                                                    }
-                                                    Text { 
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        font.family: "JetBrains Mono"
-                                                        font.weight: Font.Bold
-                                                        font.pixelSize: 16
-                                                        color: window.text
-                                                        text: monitorsModel.count > 0 ? monitorsModel.get(0).name : "Unknown" 
-                                                    }
-                                                    Text { 
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        font.family: "JetBrains Mono"
-                                                        font.pixelSize: 12
-                                                        color: window.subtext0
-                                                        text: window.currentSimW + "x" + window.currentSimH + " @ " + (monitorsModel.count > 0 ? monitorsModel.get(0).rate : "60") + "Hz" 
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
   
                         // --------------------------------------------------
                         // MODE 2: MULTI-MONITOR
@@ -830,11 +759,71 @@ Item {
             
                         ComboBox {
                             id: monitorSelector
-                            Layout.fillWidth: true
+			    implicitWidth: 150
+                            implicitHeight: 36
                             model: monitorsModel
                             textRole: "name"
-                            currentIndex: window.activeEditIndex
-           
+			    currentIndex: window.activeEditIndex
+
+			    contentItem: Text {
+                                text: monitorSelector.displayText
+                                color: col(c.on_surface, "#ffffff")
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                leftPadding: 8
+			    }
+
+			    indicator: Text {
+                                text: "▾"
+                                color: col(c.on_surface, "#ffffff")   // kolor strzałki
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            delegate: ItemDelegate {
+                                width: parent.width
+                                text: model.name
+                                contentItem: Text {
+                                    text: model.name
+                                    color: col(c.on_surface, "#ffffff")
+                                    verticalAlignment: Text.AlignVCenter
+			        }
+                                background: Rectangle {
+                                    color: highlighted
+                                           ? col(c.primary_container, "#333")
+                                           : col(c.surface_container, "#1e1e1e")
+                                }
+                            }
+
+			    background: Rectangle {
+                                radius: 8
+                                color: col(c.surface_container_high, "#2a2a2a")
+                                border.width: 1
+                                border.color: col(c.outline, "#444")
+                            }
+
+                            popup: Popup {
+                                y: monitorSelector.height
+                                width: monitorSelector.width
+       
+                                background: Rectangle {
+                                    radius: 8
+                                    color: col(c.surface_container, "#1e1e1e")
+                                    border.color: col(c.outline, "#444")
+                                }
+       
+                                contentItem: ListView {
+                                    clip: true
+                                    //implicitHeight: contentHeight
+                                    model: monitorSelector.delegateModel
+                                    currentIndex: monitorSelector.highlightedIndex
+				    //implicitHeight: 150
+				    implicitHeight: Math.min(contentHeight, 150)
+                                    ScrollIndicator.vertical: ScrollIndicator { }
+                                }
+                            }
+
                             onCurrentIndexChanged: {
                                 if (currentIndex >= 0 && currentIndex < monitorsModel.count) {
                                     window.activeEditIndex = currentIndex;
@@ -845,30 +834,79 @@ Item {
                         // =====================
                         // Switch włącz/wyłącz monitor
 			// =====================
-                        Switch {
+			Rectangle {
                             id: monitorSwitch
-			    checked: window.activeEditIndex >= 0 ? !monitorsModel.get(window.activeEditIndex).disabled : false
-			    onToggled: {
-                                if (window.activeEditIndex >= 0) {
+                            Layout.preferredWidth: 48
+                            Layout.preferredHeight: 26
+                            radius: height / 2
+      
+                            property bool checked: false
+      
+                            function refresh() {
+                                if (window.activeEditIndex >= 0 && monitorsModel.count > 0) {
+                                    let m = monitorsModel.get(window.activeEditIndex)
+                                    checked = m ? !m.disabled : false
+                                } else {
+                                    checked = false
+                                }
+                            }
+      
+                            Component.onCompleted: refresh()
+      
+                            color: checked
+                                ? col(c.primary, "#4a90e2")
+                                : col(c.surface_container_high, "#333")
+      
+                            Rectangle {
+                                width: 20
+                                height: 20
+                                radius: 10
+                                y: 3
+                                x: monitorSwitch.checked
+                                    ? parent.width - width - 3
+                                    : 3
+      
+                                color: col(c.on_surface, "#ffffff")
+      
+                                Behavior on x {
+                                    NumberAnimation { duration: 150 }
+                                }
+                            }
+      
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+      
+                                onClicked: {
+                                    if (window.activeEditIndex < 0)
+                                        return
+      
+                                    monitorSwitch.checked = !monitorSwitch.checked
+      
                                     monitorsModel.setProperty(
                                         window.activeEditIndex,
                                         "disabled",
-                                        !checked
+                                        !monitorSwitch.checked
                                     )
-                            
+      
                                     delayedLayoutUpdate.restart()
                                 }
                             }
-                       
-                            // Aktualizacja automatyczna, gdy zmienia się activeEditIndex lub disabled
+      
                             Connections {
-				target: monitorsModel
-                                onCountChanged: {
-                                    // Jeśli monitorów jest przynajmniej jeden, ustaw switch dla pierwszego
-                                    if (monitorsModel.count > 0) {
-                                        window.activeEditIndex = 0; // ustaw pierwszy monitor jako aktywny
-                                        monitorSwitch.checked = !monitorsModel.get(window.activeEditIndex).disabled;
-                                    }
+                                target: window
+                                function onActiveEditIndexChanged() {
+                                    monitorSwitch.refresh()
+                                }
+                            }
+      
+                            Connections {
+                                target: monitorsModel
+                                function onCountChanged() {
+                                    monitorSwitch.refresh()
+                                }
+                                function onDataChanged() {
+                                    monitorSwitch.refresh()
                                 }
                             }
                         }
@@ -891,7 +929,7 @@ Item {
                                 text: {
                                     if (window.activeEditIndex < 0 || monitorsModel.count === 0) return "";
                                     let m = monitorsModel.get(window.activeEditIndex);
-                                    return m.description + "\nResolution: " + m.resW + "x" + m.resH + " @ " + m.rate + "Hz";
+                                    return m.description;
                                 }
                                 font.pixelSize: 13
                                 color: col(c.on_surface_variant, "#bbbbbb")
@@ -922,82 +960,119 @@ Item {
                             }
                     
 			    // Lista dostępnych rozdzielczości
-Rectangle {
-    Layout.fillWidth: true
-    height: 36
-    radius: 8
-    color: col(c.surface_container_high, "#2a2a2a")
-    border.width: 1
-    border.color: col(c.outline, "#444")
-
-    Text {
-        anchors.fill: parent
-        anchors.margins: 8
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-        color: col(c.on_surface, "#ffffff")
-
-        text: {
-            if (window.activeEditIndex < 0 || monitorsModel.count === 0)
-                return ""
-
-            let m = monitorsModel.get(window.activeEditIndex)
-            if (!m) return ""
-
-            return m.resW + "x" + m.resH + " @ " +
-                   Number(m.rate).toFixed(2) + "Hz"
-        }
-    }
-}
-
-ComboBox {
-    id: resolutionSelector
-    Layout.fillWidth: true
-
-    model: {
-        if (window.activeEditIndex < 0 || monitorsModel.count === 0)
-            return 0
-
-        let m = monitorsModel.get(window.activeEditIndex)
-        if (!m || !m.availableRes)
-            return 0
-
-        return m.availableRes.length
-    }
-
-    delegate: ItemDelegate {
-        width: parent.width
-
-        text: {
-            let m = monitorsModel.get(window.activeEditIndex)
-            if (!m || !m.availableRes || index >= m.availableRes.length)
-                return ""
-
-            let r = m.availableRes[index]
-            return r.width + "x" + r.height + " @ " +
-                   Number(r.refresh).toFixed(2) + "Hz"
-        }
-    }
-
-    onActivated: function(index) {
-        let m = monitorsModel.get(window.activeEditIndex)
-        if (!m || !m.availableRes || index >= m.availableRes.length)
-            return
-
-        let r = m.availableRes[index]
-
-        monitorsModel.setProperty(window.activeEditIndex, "resW", r.width)
-        monitorsModel.setProperty(window.activeEditIndex, "resH", r.height)
-        monitorsModel.setProperty(window.activeEditIndex, "rate", r.refresh)
-
-        delayedLayoutUpdate.restart()
-    }
-Component.onCompleted: {
-    let m = monitorsModel.get(window.activeEditIndex)
-    console.log("RES COUNT:", m ? m.availableRes.length : "no monitor")
-}
-}
-
+			    ComboBox {
+                               id: resolutionSelector
+                               Layout.fillWidth: true
+                             
+                               property var parsedList: []
+                             
+                               model: parsedList
+                             
+                               // =========================
+                               // TEKST WYBRANEJ WARTOŚCI
+                               // =========================
+                               contentItem: Text {
+                                   text: resolutionSelector.displayText
+                                   color: col(c.on_surface, "#ffffff")   // kolor czcionki
+                                   verticalAlignment: Text.AlignVCenter
+                                   elide: Text.ElideRight
+                                   leftPadding: 8
+                               }
+                             
+                               // =========================
+                               // STRZAŁKA
+                               // =========================
+                               indicator: Text {
+                                   text: "▾"
+                                   color: col(c.on_surface, "#ffffff")
+                                   anchors.right: parent.right
+                                   anchors.rightMargin: 8
+                                   anchors.verticalCenter: parent.verticalCenter
+                               }
+                             
+                               // =========================
+                               // TŁO COMBOBOX
+                               // =========================
+                               background: Rectangle {
+                                   radius: 8                       // zaokrąglenie
+                                   color: col(c.surface_container_high, "#2a2a2a")
+                                   border.width: 1
+                                   border.color: col(c.outline, "#444")
+                               }
+                             
+                               // =========================
+                               // ELEMENTY LISTY
+                               // =========================
+                               delegate: ItemDelegate {
+                                   width: parent.width
+                                   text: modelData ? modelData : ""
+                             
+                                   contentItem: Text {
+                                       text: modelData ? modelData : ""
+                                       color: highlighted
+                                              ? col(c.on_primary, "#000000")
+                                              : col(c.on_surface, "#ffffff")
+                                       verticalAlignment: Text.AlignVCenter
+                                       elide: Text.ElideRight
+                                   }
+                             
+                                   background: Rectangle {
+                                       radius: 6
+                                       color: highlighted
+                                              ? col(c.primary_container, "#333")
+                                              : col(c.surface_container, "#1e1e1e")
+                                   }
+                               }
+                             
+                               // =========================
+                               // POPUP TŁO
+                               // =========================
+                               popup: Popup {
+                                   y: resolutionSelector.height
+				   width: resolutionSelector.width
+                             
+                                   background: Rectangle {
+				       radius: 8
+                                       color: col(c.surface_container, "#1e1e1e")
+                                       border.color: col(c.outline, "#444")
+                                   }
+                             
+                                   contentItem: ListView {
+                                       clip: true
+                                       model: resolutionSelector.delegateModel
+                                       currentIndex: resolutionSelector.highlightedIndex
+                                       implicitHeight: Math.min(contentHeight, 150)
+                                       ScrollIndicator.vertical: ScrollIndicator { }
+                                   }
+                               }
+                             
+                               // =========================
+                               // LOGIKA (BEZ ZMIAN)
+                               // =========================
+                               onActivated: function(index) {
+                                   let list = parsedList
+                                   if (!list || index >= list.length) return
+                             
+                                   let mode = list[index]
+                                   if (!mode) return
+                             
+                                   let match = mode.match(/(\d+)x(\d+)@([\d.]+)/)
+                                   if (!match) return
+                             
+                                   monitorsModel.setProperty(window.activeEditIndex, "resW", parseInt(match[1]))
+                                   monitorsModel.setProperty(window.activeEditIndex, "resH", parseInt(match[2]))
+                                   monitorsModel.setProperty(window.activeEditIndex, "rate", parseFloat(match[3]))
+                             
+                                   delayedLayoutUpdate.restart()
+                               }
+                             
+                               Connections {
+                                   target: window
+                                   function onActiveEditIndexChanged() {
+                                       updateResolutionSelector()
+                                   }
+                               }
+                            }
                         }
                     }
                 }
@@ -1012,12 +1087,6 @@ Component.onCompleted: {
                 radius: 12
                 color: col(c.surface_container, "#1c1c1c")
  
-                ComboBox {
-                    anchors.centerIn: parent
-                    width: 300
-                    model: monitorsModel
-                    textRole: "name"
-                }
             }
         }
 }
