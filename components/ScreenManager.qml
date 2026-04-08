@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
+import Qt.labs.platform
 import qs.services as Services
 import "../colors" as ColorsModule
 
@@ -11,7 +12,7 @@ Item {
     id: window
     //anchors.fill: parent
     implicitWidth:  450
-    implicitHeight: 1000
+    implicitHeight: 600
     focus: true
 
     property var c: ColorsModule.Colors
@@ -54,6 +55,10 @@ Item {
         loops: Animation.Infinite
         running: true
     }
+
+    // Wallpapers local path
+    property string wallpaperDir: ""
+
     // -------------------------------------------------------------------------
     // FLUID STARTUP ANIMATIONS 
     // -------------------------------------------------------------------------
@@ -64,7 +69,13 @@ Item {
 
     Component.onCompleted: {
         startupAnim.start()
-        updateResolutionSelector()
+	updateResolutionSelector()
+	// wallpapers
+	wallpaperLoader.command = [
+            "bash","-c",
+            `cat "$HOME/.config/quickshell/wallpaper_dir" 2>/dev/null`
+        ]
+        wallpaperLoader.running = true
     }
 
     ParallelAnimation {
@@ -253,37 +264,33 @@ Item {
         }
     }
 
-    function buildKanshiProfile() {
-        let profile = "profile auto {\n"
+    function startWallpaperScan() {
+        if (!window.wallpaperDir || window.wallpaperDir.length === 0)
+            return
  
-        for (let i = 0; i < monitorsModel.count; i++) {
-            let m = monitorsModel.get(i)
-            if (m.disabled) continue
+        wallpaperScan.running = false
  
-            let x = Math.round(m.uiX / uiScale)
-            let y = Math.round(m.uiY / uiScale)
- 
-            profile +=
-                `  output ${m.name} ` +
-                `mode ${m.resW}x${m.resH}@${Math.round(m.rate)}Hz ` +
-                `position ${x},${y} ` +
-                `scale ${m.scale}\n`
-        }
- 
-        profile += "}\n"
-        return profile
-    }
-
-    function saveConfiguration() {
-        let profile = buildKanshiProfile()
- 
-        saveKanshiProc.command = [
+        wallpaperScan.command = [
             "bash",
             "-c",
-            `mkdir -p ~/.config/kanshi && echo '${profile}' > ~/.config/kanshi/config`
+            `find "${window.wallpaperDir}" -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" -o -iname "*.webp" \\)`
         ]
-        saveKanshiProc.running = true
+ 
+        wallpaperScan.running = true
     }
+
+    function saveWallpaperPath() {
+    saveWallpaperDir.command = [
+        "bash","-c",
+        `
+        CONFIG="$HOME/.config/quickshell/wallpaper_dir";
+        mkdir -p "$(dirname "$CONFIG")";
+        printf "%s" "${window.wallpaperDir}" > "$CONFIG"
+        `
+    ]
+
+    saveWallpaperDir.running = true
+}
 
     Timer {
         id: delayedLayoutUpdate
@@ -355,6 +362,51 @@ Item {
 	running: false
     }
 
+    // wallpaper processes
+    Process {
+        id: wallpaperLoader
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let path = this.text.trim()
+                if (path.length > 0) {
+                    window.wallpaperDir = path
+                    startWallpaperScan()
+                }
+            }
+        }
+    }
+
+    Process {
+        id: wallpaperScan
+ 
+        stdout: StdioCollector {
+            onStreamFinished: {
+                wallpaperModel.clear()
+ 
+                let txt = this.text.trim()
+                if (!txt.length)
+                    return
+ 
+                let lines = txt.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    wallpaperModel.append({ path: lines[i] })
+                }
+            }
+        }
+    }
+
+    ListModel {
+        id: wallpaperModel
+    }
+
+    Process {
+        id: setWallpaperProc
+    }
+
+    Process {
+	id: saveWallpaperDir
+    }
+
     // -------------------------------------------------------------------------
     // UI LAYOUT
     // -------------------------------------------------------------------------
@@ -380,7 +432,12 @@ Item {
                 Button {
                     Layout.preferredWidth: 70
                     onClicked: window.applyConfiguration()
- 
+    
+                    hoverEnabled: true
+                    property real pressScale: down ? 0.96 : (hovered ? 1.02 : 1.0)
+                    scale: pressScale
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+    
                     contentItem: Text {
                         text: "Apply"
                         color: col(c.on_surface, "#0af")
@@ -388,17 +445,29 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 14
                     }
- 
+    
                     background: Rectangle {
                         radius: 10
                         color: col(c.primary_container, "#222")
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                        }
                     }
                 }
- 
+
                 Button {
-                    Layout.preferredWidth: 70
-                    onClicked: window.saveConfiguration()
- 
+		    Layout.preferredWidth: 70
+		    onClicked: {
+                        saveKanshiProc.command = ["/bin/bash", "-c", "~/.config/quickshell/scripts/save_kanshi_profile.sh"]
+                        saveKanshiProc.running = true
+		    }
+
+                    hoverEnabled: true
+                    property real pressScale: down ? 0.96 : (hovered ? 1.02 : 1.0)
+                    scale: pressScale
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+
                     contentItem: Text {
                         text: "Save"
                         color: col(c.on_surface, "#0af")
@@ -410,12 +479,21 @@ Item {
                     background: Rectangle {
                         radius: 10
                         color: col(c.primary_container, "#222")
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                        }
                     }
                 }
  
                 Button {
                     Layout.preferredWidth: 80
                     onClicked: window.restoreSnapshot()
+
+                    hoverEnabled: true
+                    property real pressScale: down ? 0.96 : (hovered ? 1.02 : 1.0)
+                    scale: pressScale
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
  
                     contentItem: Text {
                         text: "Restore"
@@ -428,6 +506,10 @@ Item {
                     background: Rectangle {
                         radius: 10
                         color: col(c.primary_container, "#222")
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                        }
                     }
                 }
             }
@@ -733,7 +815,7 @@ Item {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 280
+                Layout.preferredHeight: 150
                 radius: 12
                 color: col(c.surface_container, "#1c1c1c")
                 anchors.topMargin: 10
@@ -1083,10 +1165,131 @@ Item {
             // =================================================
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 460
+                Layout.preferredHeight: 250
                 radius: 12
                 color: col(c.surface_container, "#1c1c1c")
- 
+   
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 10
+   
+                    Text {
+                        text: "Wallpaper"
+                        font.pixelSize: 14
+                        color: col(c.on_surface, "#fff")
+                    }
+   
+                    RowLayout {
+                        Layout.fillWidth: true
+   
+                        TextField {
+                            id: wallpaperPathField
+                            Layout.fillWidth: true
+                            implicitHeight: 34
+               
+                            text: window.wallpaperDir
+                            placeholderText: "Select folder..."
+               
+                            color: col(c.on_surface, "#fff")
+                            placeholderTextColor: col(c.on_surface_variant, "#888")
+               
+                            background: Rectangle {
+                                radius: 8
+                                color: col(c.surface_container_high, "#2a2a2a")
+                                border.width: 1
+                                border.color: col(c.outline, "#444")
+                            }
+               
+			    onEditingFinished: {
+                                window.wallpaperDir = text
+                                saveWallpaperPath()
+                                startWallpaperScan()
+                            }
+      
+                            onAccepted: {
+                                window.wallpaperDir = text
+                                saveWallpaperPath()
+                                startWallpaperScan()
+                            }
+               
+                        }
+   
+                        Button {
+                            text: "Browse"
+                            onClicked: folderDialog.open()
+                        }
+                    }
+   
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        contentWidth: flow.width
+                        clip: true
+   
+                        Flow {
+                            id: flow
+                            height: parent.height
+                            spacing: 8
+   
+                            Repeater {
+                                model: wallpaperModel
+   
+                                Rectangle {
+                                    width: 140
+                                    height: 90
+                                    radius: 8
+                                    color: "#111"
+                                    clip: true
+   
+                                    Image {
+                                        anchors.fill: parent
+                                        source: "file://" + model.path
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                    }
+   
+                                    MouseArea {
+					anchors.fill: parent
+                                        onClicked: {
+                                            let monitor = monitorsModel.get(window.activeEditIndex)
+                                            if (!monitor) return
+          
+                                            let output = monitor.name
+                                            let img = model.path
+          
+                                            setWallpaperProc.command = [
+                                                "bash",
+                                                "-c",
+                                                `swww img "${img}" --outputs "${output}" --transition-type grow --transition-duration 0.3 || awww img "${img}" -o "${output}"`
+                                            ]
+          
+                                            setWallpaperProc.running = true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+   
+                        ScrollBar.horizontal: ScrollBar {}
+                    }
+                }
+   
+                FolderDialog {
+                    id: folderDialog
+                    onAccepted: {
+                        window.wallpaperDir = selectedFolder.toString().replace("file://","")
+                        wallpaperPathField.text = window.wallpaperDir
+              
+                        saveWallpaperDir.command = [
+			    "bash","-c",
+			    `mkdir -p "$(dirname "${window.wallpaperConfig}")"; echo "${window.wallpaperDir}" > "${window.wallpaperConfig}"`
+                        ]
+                        saveWallpaperDir.running = true
+              
+                        startWallpaperScan()
+                    }
+                }
             }
         }
 }
