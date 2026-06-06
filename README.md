@@ -1,0 +1,1 @@
+clone to ~/.config/quickshell
