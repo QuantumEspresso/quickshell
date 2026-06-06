@@ -40,7 +40,9 @@ Singleton {
 
     // switch workspace safely
     function changeWorkspace(targetWorkspaceId) {
-        root.dispatch("workspace " + targetWorkspaceId)
+        root.dispatch(
+            'hl.dsp.focus({ workspace = "' + targetWorkspaceId + '" })'
+        )
     }
 
     // find most recently focused window in a workspace

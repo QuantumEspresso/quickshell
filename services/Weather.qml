@@ -29,7 +29,7 @@ Singleton {
 
     Process {
         id: geoProc
-        command: ["/usr/bin/curl","-s","https://ipapi.co/json"]
+        command: ["curl","-s","https://ipapi.co/json"]
 
         stdout: StdioCollector {
             onStreamFinished: {
@@ -57,7 +57,7 @@ Singleton {
         id: weatherProc
 
         command: [
-            "/usr/bin/curl","-s",
+            "curl","-s",
             "https://api.open-meteo.com/v1/forecast"
             + "?latitude=" + root.lat
             + "&longitude=" + root.lon

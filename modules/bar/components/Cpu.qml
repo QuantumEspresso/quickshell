@@ -116,7 +116,7 @@ Rectangle {
     // =========================
     Process {
         id: cpuProc
-        command: ["bash", "-c", "~/.config/hypr/scripts/dropdown-term.sh btop"]
+        command: ["bash", "-c", "hyprctl dispatch \"hl.dsp.workspace.toggle_special('btop')\""]
     }
 
     // =========================
@@ -124,7 +124,7 @@ Rectangle {
     // =========================
     Process {
         id: gpuProcLauncher
-        command: ["bash", "-c", "~/.config/hypr/scripts/dropdown-term.sh nvtop"]
+        command: ["bash", "-c", "hyprctl dispatch \"hl.dsp.workspace.toggle_special('nvtop')\""]
     }
 
     // =========================

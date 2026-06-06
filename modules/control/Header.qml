@@ -52,7 +52,7 @@ Rectangle {
                 Image {
                     id: avatarImage
                     anchors.fill: parent
-                    source: "file:///home/" + Services.System.username + "/.config/quickshell/red.png"
+                    source: "file:///home/" + Services.System.username + "/.config/quickshell/picture.png"
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
                     visible: false

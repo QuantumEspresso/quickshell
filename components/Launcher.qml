@@ -35,25 +35,21 @@ Item {
 
     function launch(app) {
         if (!app) return
-
+ 
+        let cmd = app.exec.split(" ")
+ 
         if (app.terminal) {
-            Qt.createQmlObject(`
-                import Quickshell.Io
-                Process {
-                    command: ["foot","-e","${app.exec}"]
-                    running: true
-                }
-            `, root)
-        } else {
-            Qt.createQmlObject(`
-                import Quickshell.Io
-                Process {
-                    command: ["${app.exec}"]
-                    running: true
-                }
-            `, root)
+            cmd = ["foot", "-e"].concat(cmd)
         }
-
+ 
+        Qt.createQmlObject(`
+            import Quickshell.Io
+            Process {
+                command: ${JSON.stringify(cmd)}
+                running: true
+            }
+        `, root)
+ 
         toggleProc.running = true
     }
 
@@ -151,22 +147,26 @@ Item {
                         anchors.margins: 8
                         spacing: 10
 
-			Image {
-                            width: 22
-                            height: 22
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            source: {
-                                if (modelData.icon && modelData.icon.length > 0) {
-                                    // Spróbuj pobrać ikonę systemową
-                                    const iconPath = "/usr/share/icons/hicolor/48x48/apps/" + modelData.icon + ".png"
-                                    return iconPath
-                                } else {
-                                    // fallback do lokalnej ikony
-                                    return "components/assets/app-fallback.png"
-                                }
-                            }
-                        }
+Image {
+    width: 22
+    height: 22
+
+    Layout.preferredWidth: 22
+    Layout.preferredHeight: 22
+    Layout.maximumWidth: 22
+    Layout.maximumHeight: 22
+
+    sourceSize.width: 22
+    sourceSize.height: 22
+
+    fillMode: Image.PreserveAspectFit
+    smooth: true
+    mipmap: true
+
+    source: modelData.icon
+            ? "image://icon/" + modelData.icon
+            : "components/assets/app-fallback.png"
+}
 
                         Text {
                             text: modelData.name
@@ -182,8 +182,6 @@ Item {
 
                         onEntered: {
                             hovered = true
-                            root.selectedIndex = index
-                            list.currentIndex = index
                         }
                         onExited: hovered = false
                         onClicked: launch(modelData)

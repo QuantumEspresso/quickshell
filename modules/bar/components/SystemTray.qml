@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Services.SystemTray
 import qs.Core
@@ -9,10 +10,27 @@ import "../../../colors" as ColorsModule
 RowLayout {
     id: root
 
+    function cleanIcon(icon) {
+        if (!icon) return ""
+ 
+        // usuń ?path=...
+        let base = icon.split("?")[0]
+ 
+        return base
+    }
+
+    function normalizeIcon(icon) {
+        if (!icon) return ""
+ 
+        let base = icon.split("?")[0]
+ 
+        return base
+    }
+
     property var colors: ColorsModule.Colors
     property bool trayOpen: false
 
-    visible: SystemTray.items.values.length > 0
+    visible: SystemTray.items && SystemTray.items.values && SystemTray.items.values.length > 0
     spacing: 4
 
     Rectangle {
@@ -33,13 +51,49 @@ RowLayout {
             anchors.centerIn: parent
             spacing: 8
 
-            Tray {
-                iconSize: 16
-                colors: root.colors
-            }
-        }
+	    Tray {
+	        iconSize: 16
+		colors: root.colors
+	    }
+//            Repeater {
+//                model: SystemTray.items.values
 
-        /* ===== Animations restored with hardcoded values ===== */
+//delegate: MouseArea {
+//    required property var modelData
+
+//    width: 20
+//    height: 20
+//    hoverEnabled: true
+
+//onClicked: {
+//    Qt.callLater(() => {
+//        Qt.createQmlObject(`
+//            import Quickshell.Io
+//            Process {
+//                command: ["hyprctl", "dispatch", "focuswindow", "class:${modelData.id}"]
+//                running: true
+//            }
+//        `, root)
+//    })
+//}
+
+//    Image {
+//        anchors.centerIn: parent
+//        width: 16
+//        height: 16
+
+//        fillMode: Image.PreserveAspectFit
+//        smooth: true
+
+//        source: {
+//            let icon = modelData.icon
+//            return icon ? icon.split("?")[0] : "image://icon/application-x-executable"
+//        }
+//    }
+//}
+
+//            }
+        }
 
         Behavior on Layout.preferredWidth {
             NumberAnimation {

@@ -164,7 +164,7 @@ function getWorkspaceName(wsId) {
                         Text {
                             anchors.centerIn: parent
 			    text: getWorkspaceName(wsId)
-                            font.family: "Zuish"
+                            font.family: "Unown"
                             //font.family: fontFamily
                             font.bold: isActive
                             color: isActive ? colors.background : colors.secondary

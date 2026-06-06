@@ -84,10 +84,10 @@ ColumnLayout {
         }
 
         ToggleTile {
-		label: Services.Theme.light ? "Light" : "Dark"
-            icon: ""
-            active: Services.Theme.light
-	    onClicked: Services.Theme.toggle()
+            label: "View Stats"
+            icon: ""
+            active: systemPanel.opened
+            onClicked: toggleConky.running = true
         }
 
         ToggleTile {
@@ -124,13 +124,10 @@ ColumnLayout {
         }
 
         ToggleTile {
-            label: "View Stats"
-            icon: ""
-            active: airplaneModeEnabled
-            onClicked: {
-                quickSettings.airplaneModeEnabled = !airplaneModeEnabled
-                run("rfkill " + (airplaneModeEnabled ? "block" : "unblock") + " all")
-            }
+	    label: Services.Theme.light ? "Light" : "Dark"
+            icon: ""
+            active: Services.Theme.light
+	    onClicked: Services.Theme.toggle()
         }
     }
 
@@ -143,6 +140,10 @@ ColumnLayout {
         id: screenshotProc
     }
 
+    Process {
+        id: toggleConky
+        command: ["qs","ipc","call","systemPanel","changeVisible"]
+    }
 
     function startRecording() {
         run(["bash","-c",`

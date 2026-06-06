@@ -81,7 +81,7 @@ Item {
 
     Process {
         id: genProc
-        command: ["bash", "-c", "~/.config/quickshell/scripts/get_shortcuts.sh"]
+        command: ["bash", "-c", "echo test"]
 
         onExited: {
             readProc.running = true

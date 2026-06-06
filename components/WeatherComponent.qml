@@ -55,6 +55,7 @@ Item {
 
                             Text {
                                 text: icon(modelData.code)
+                                font.family: "Symbols Nerd Font"
                                 font.pixelSize: 18
                             }
 
@@ -120,11 +121,13 @@ Item {
 
     function icon(code){
         if(code===0) return "☀️"
+        if(code<=2) return "🌤️"
         if(code<=3) return "⛅"
         if(code<=48) return "☁️"
-        if(code<=67) return "🌧"
+        if(code<=55) return "🌦️"
+        if(code<=67) return "🌧️"
         if(code<=77) return "❄️"
-        if(code<=99) return "⛈"
+        if(code<=99) return "⛈️"
         return ""
     }
 }

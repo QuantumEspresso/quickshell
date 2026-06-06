@@ -1,4 +1,6 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import qs.services as Services
 import "../../../colors" as ColorsModule
 import qs.Core
@@ -9,7 +11,6 @@ Rectangle {
     implicitHeight: 28
     implicitWidth: battery.implicitWidth + 16
 
-    // 🔥 KLUCZ
     visible: Services.Battery.hasBattery
 
     Text {
@@ -25,4 +26,16 @@ Rectangle {
                   Services.Battery.hasBattery
               ) + " " + Services.Battery.percentage + "%"
     }
+    MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: toggleProc.running = true
+    }
+    
+    Process {
+        id: toggleProc
+        command: ["qs","ipc","call","batteryPanel","changeVisible"]
+    }
 }
+
+

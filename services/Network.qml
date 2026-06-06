@@ -6,7 +6,7 @@
     Singleton {
         id: root
 
-        readonly property list<Connection> connections: []
+	property var connections: []
         readonly property list<string> savedNetworks: []
         readonly property Connection active: connections.find(c => c.active) ?? null
 
@@ -112,30 +112,46 @@
             ));
 
             for (const conn of destroyed)
-        rConns.splice(rConns.indexOf(conn), 1).forEach(c => c.destroy());
-
-        for (const conn of newConns) {
-            const match = rConns.find(c =>
-                    connType === "wifi" ? (c.frequency === conn.frequency && c.name === conn.name && c.bssid === conn.bssid)
-                    : c.uuid === conn.uuid
-            );
-            if (match) {
-                match.lastIpcObject = conn;
-            } else {
-                rConns.push(connComp.createObject(root, { lastIpcObject: conn }));
+            rConns.splice(rConns.indexOf(conn), 1).forEach(c => c.destroy());
+ 
+            for (const conn of newConns) {
+                const match = rConns.find(c =>
+                        connType === "wifi" ? (c.frequency === conn.frequency && c.name === conn.name && c.bssid === conn.bssid)
+                        : c.uuid === conn.uuid
+                );
+                if (match) {
+                    match.lastIpcObject = conn;
+                } else {
+                    rConns.push(connComp.createObject(root, { lastIpcObject: conn }));
+                }
+	    }
+            root.connections = [...rConns]
+        }
+ 
+        Process {
+            id: nmMonitor
+            running: true
+            command: ["nmcli", "monitor"]
+  
+            stdout: StdioCollector {
+		onTextChanged: {
+	            Qt.callLater(() => {
+                        root.getWifiStatus()
+                        root.updateConnections()
+                    })
+                }
             }
         }
-    }
-
-
-    Process {
+ 
+        Process {
             id: wifiStatusProc
             running: true
             command: ["nmcli", "radio", "wifi"]
             environment: ({LANG: "C.UTF-8", LC_ALL: "C.UTF-8"})
             stdout: StdioCollector {
                 onStreamFinished: {
-                    root.wifiEnabled = text.trim() === "enabled"
+		    root.wifiEnabled = text.trim() === "enabled"
+                    root.updateConnections()
                     if (!root.wifiEnabled) {
                         root.lastErrorMessage = "";
                         root.message = "";

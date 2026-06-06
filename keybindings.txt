@@ -1,0 +1,76 @@
+ + 󰌑                open terminal
+ + T                   open terminal
+ + 󰘵 + B            open Brave browser
+ + 󰘵 + D            open Discord
+ + 󰘵 + S            ope Signal
+ + 󰘵 + F            open FIle Manager
+ + 󰘵 + Del          lock screen
+ + 󰘵 + X            run application
+ + 󰘵 + R            draw on screen
+ + Q                   close active window
+ + 󰘶 + Q            exit 
+ + V                   toggle floating window
+ + F                   toggle fullscreen
+ + left                change focus to left window
+ + right               change focus to right window
+ + up                  change focus to window above
+ + down                change focus to window below
+ + H                   change focus to left window
+ + L                   change focus to right window
+ + K                   change focus to window above
+ + J                   change focus to window below
+ + 󰘶 + left         move window to left
+ + 󰘶 + right        move window to right
+ + 󰘶 + up           move window up
+ + 󰘶 + down         move window down
+ + 󰘶 + H            move window to left
+ + 󰘶 + L            move window to right
+ + 󰘶 + K            move window up
+ + 󰘶 + J            move window down
+ + 󰘵 + right        broaden window
+ + 󰘵 + left         narrow window
+ + 󰘵 + up           enlarge window
+ + 󰘵 + down         reduce window
+ + 󰘵 + L            broaden window
+ + 󰘵 + H            narrow window
+ + 󰘵 + K            enlarge window
+ + 󰘵 + J            reduce window
+ + 1                   switch to workspace 1
+ + 2                   switch to workspace 2
+ + 3                   switch to workspace 3
+ + 4                   switch to workspace 4
+ + 5                   switch to workspace 5
+ + 6                   switch to workspace 6
+ + 7                   switch to workspace 7
+ + 8                   switch to workspace 8
+ + 9                   switch to workspace 9
+ + Z                   switch to previous workspace
+ + X                   switch to next workspace
+ + 󰘶 + 1            move window to workspace 1
+ + 󰘶 + 2            move window to workspace 2
+ + 󰘶 + 3            move window to workspace 3
+ + 󰘶 + 4            move window to workspace 4
+ + 󰘶 + 5            move window to workspace 5
+ + 󰘶 + 6            move window to workspace 6
+ + 󰘶 + 7            move window to workspace 7
+ + 󰘶 + 8            move window to workspace 8
+ + 󰘶 + 9            move window to workspace 9
+ + 󰘶 + Z            move window to previous workspace
+ + 󰘶 + X            move window to next workspace
+ + 󱕒                scroll through workspaces
+ + 󱕒                scroll through workspaces
+ + LMB                 move window with mouse
+ + RMB                 resize window with mouse
+                       area screenshot
+ +                  full screen screenshot
+ + 󰘵 +           active window screenshot
+󰐎                      play / pause
+󰒭                      media player next
+󰒮                      media player previous
+󰘵 + T                  dropdown terminal
+󰘵 + M                  dropdown cmus music player
+󰘵 + B                  dropdown internet browser
+󰘵 + C                  dropdown calendar
+󰘵 + S                  dropdown Signal
+󰘵 + D                  dropdown Discord
+󰘵 + O                  toggle opacity

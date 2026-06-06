@@ -15,10 +15,8 @@ Rectangle {
 
     property bool hovered: false
 
-    // 🔥 nowy property reactive dla active network
     property var activeConnection: null
 
-    // Funkcja do ręcznej aktualizacji activeConnection
     function updateActiveConnection() {
         let found =
             Services.Network.connections.find(c => c.active && c.type === "wifi")

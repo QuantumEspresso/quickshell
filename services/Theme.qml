@@ -16,6 +16,11 @@ Item {
         toggleProcess.running = true
     }
 
+    function changeWallpaper(path) {
+        toggleWallpaper.path = path
+        toggleWallpaper.running = true
+    }
+
     Process {
         id: detectProcess
         command: ["bash", "-c", "gsettings get org.gnome.desktop.interface color-scheme"]
@@ -32,22 +37,22 @@ Item {
         command: [
             "bash", "-c",
             `
-CURRENT=$(gsettings get org.gnome.desktop.interface color-scheme)
-
-if [ "$CURRENT" = "'prefer-dark'" ]; then
-    gsettings set org.gnome.desktop.interface color-scheme default
-    gsettings set org.gnome.desktop.interface gtk-theme Adwaita
-    kvantummanager --set KvArc
-else
-    gsettings set org.gnome.desktop.interface color-scheme prefer-dark
-    gsettings set org.gnome.desktop.interface gtk-theme Adwaita-dark
-    kvantummanager --set KvArcDark
-fi
-
-systemctl --user restart xdg-desktop-portal 2>/dev/null
-`
+                ~/.config/quickshell/scripts/light-dark.sh theme
+            `
         ]
-        onExited: detect() // odśwież stan po przełączeniu
+        onExited: detect()
+    }
+
+    Process {
+    id: toggleWallpaper
+
+        property string path: ""
+        
+        command: [
+            "bash",
+            "-c",
+            "exec ~/.config/quickshell/scripts/light-dark.sh wallpaper \"" + path + "\""
+        ]
     }
 
     Component.onCompleted: detect()

@@ -5,14 +5,14 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Qt.labs.platform
-import qs.services as Services
+import qs.services
 import "../colors" as ColorsModule
 
 Item {
     id: window
     //anchors.fill: parent
     implicitWidth:  450
-    implicitHeight: 600
+    implicitHeight: 800
     focus: true
 
     property var c: ColorsModule.Colors
@@ -39,10 +39,6 @@ Item {
     ListModel {
         id: monitorsModel
     }
-    
-    // Replaced hardcoded accents with dynamic defaults
-    property color selectedResAccent: window.mauve
-    property color selectedRateAccent: window.blue
 
     property real currentSimW: monitorsModel.count > 0 ? monitorsModel.get(0).resW : 1920
     property real currentSimH: monitorsModel.count > 0 ? monitorsModel.get(0).resH : 1080
@@ -75,7 +71,9 @@ Item {
             "bash","-c",
             `cat "$HOME/.config/quickshell/wallpaper_dir" 2>/dev/null`
         ]
-        wallpaperLoader.running = true
+	wallpaperLoader.running = true
+	loadInputDevicesProc.running = true
+	console.log("TEST:", typeof Monitors.getMappedMonitor)
     }
 
     ParallelAnimation {
@@ -310,8 +308,9 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    let data = JSON.parse(this.text.trim());
+                    let data = JSON.parse(text.trim());
                     monitorsModel.clear();
+                    window.activeEditIndex = 0
                     
                     let minX = 999999, minY = 999999;
 
@@ -407,6 +406,100 @@ Item {
 	id: saveWallpaperDir
     }
 
+    // input devices
+
+    ListModel {
+        id: screenInputDevicesModel
+    }
+
+    Process {
+        id: loadInputDevicesProc
+ 
+        command: [
+            "bash","-c",
+            `hyprctl -j devices | jq -r '
+                (.touch[]?.name),
+                (.tablets[]?.name),
+                (.tabletPads[]?.name)
+            '`
+        ]
+ 
+        stdout: StdioCollector {
+            onStreamFinished: {
+                screenInputDevicesModel.clear()
+ 
+                let lines = text.trim().split("\n")
+                for (let i = 0; i < lines.length; ++i) {
+                    let name = lines[i].trim()
+                    if (!name.length) continue
+ 
+                    screenInputDevicesModel.append({
+                        name: name,
+                        selectedMonitor: ""
+                    })
+                }
+            }
+        }
+    }
+
+    Process {
+        id: saveInputMappingProc
+ 
+        property string device
+        property string description
+ 
+        onStarted: console.log("saveInputMappingProc running")
+        command: [
+            "bash","-c",
+            `
+                FILE="$HOME/.config/hypr/input-device-mapping.conf"
+ 
+                mkdir -p "$(dirname "$FILE")"
+ 
+                touch "$FILE"
+ 
+                grep -v -F "${device}|" "$FILE" > "$FILE.tmp" 2>/dev/null || true
+                echo "${device}|${description}" >> "$FILE.tmp"
+ 
+                mv "$FILE.tmp" "$FILE"
+ 
+                echo "Saved ${device} -> ${description} to $FILE" >&2
+            `
+        ]
+    }
+
+    Process {
+        id: readDeviceMappingProc
+ 
+        property string deviceName
+        property var targetCombo
+ 
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let description = text.trim()
+ 
+                if (!description.length)
+                    return
+ 
+                const ref = readDeviceMappingProc.targetCombo
+ 
+                if (!ref)
+                    return
+ 
+                for (let i = 0; i < monitorsModel.count; ++i) {
+                    if (monitorsModel.get(i).description === description) {
+                        ref.currentIndex = i + 1
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    Process {
+	id: applyInputProc
+    }
+
     // -------------------------------------------------------------------------
     // UI LAYOUT
     // -------------------------------------------------------------------------
@@ -459,7 +552,7 @@ Item {
                 Button {
 		    Layout.preferredWidth: 70
 		    onClicked: {
-                        saveKanshiProc.command = ["/bin/bash", "-c", "~/.config/quickshell/scripts/save_kanshi_profile.sh"]
+                        saveKanshiProc.command = ["bash", "-c", "~/.config/quickshell/scripts/save_kanshi_profile.sh"]
                         saveKanshiProc.running = true
 		    }
 
@@ -527,31 +620,10 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 30
-                    color: window.base
-                    border.color: window.surface0
+                    color: c.surface_container_high
+                    border.color: c.outline
                     border.width: 1
                     clip: true
-  
-                    Rectangle {
-                        width: parent.width * 0.8
-                        height: width
-                        radius: width / 2
-                        x: (parent.width / 2 - width / 2) + Math.cos(window.globalOrbitAngle * 2) * 150
-                        y: (parent.height / 2 - height / 2) + Math.sin(window.globalOrbitAngle * 2) * 100
-                        opacity: 0.04
-                        color: window.selectedResAccent
-                        Behavior on color { ColorAnimation { duration: 1000 } }
-                    }
-                    Rectangle {
-                        width: parent.width * 0.9
-                        height: width
-                        radius: width / 2
-                        x: (parent.width / 2 - width / 2) + Math.sin(window.globalOrbitAngle * 1.5) * -150
-                        y: (parent.height / 2 - height / 2) + Math.cos(window.globalOrbitAngle * 1.5) * -100
-                        opacity: 0.04
-                        color: window.selectedRateAccent
-                        Behavior on color { ColorAnimation { duration: 1000 } }
-                    }
   
                     // ==========================================
                     // LEFT SIDE VISUAL AREA
@@ -569,7 +641,7 @@ Item {
                         // --------------------------------------------------
                         Item {
                             anchors.fill: parent
-                            visible: monitorsModel.count > 1
+                            visible: monitorsModel.count >= 1
   
                             Item {
                                 id: multiMonitorView
@@ -585,7 +657,7 @@ Item {
                                     spacing: 18
                                     Repeater { 
                                         model: 850
-                                        Rectangle { width: 2; height: 2; radius: 1; color: Qt.alpha(window.text, 0.1) } 
+                                        Rectangle { width: 2; height: 2; radius: 1; color: Qt.alpha(c.on_surface, 0.1) } 
                                     }
                                 }
   
@@ -685,8 +757,8 @@ Item {
                                                 height: (model.resH / window.effectiveScale(model)) * window.uiScale
                                                 
                                                 radius: 8
-                                                color: isActive ? window.surface1 : window.crust
-                                                border.color: isActive ? window.selectedResAccent : window.surface2
+                                                color: isActive ? c.surface_container_high : c.surface_container_high
+                                                border.color: isActive ? c.outline : c.outline
                                                 border.width: isActive ? 2 : 1
                                                 z: isActive ? 5 : 0
   
@@ -714,7 +786,7 @@ Item {
                                                             Layout.alignment: Qt.AlignHCenter
                                                             font.family: "Iosevka Nerd Font"
                                                             font.pixelSize: 32
-                                                            color: isActive ? window.selectedResAccent : window.text
+                                                            color: isActive ? c.on_surface : c.on_surface
                                                             text: "󰍹"
                                                             Behavior on color { ColorAnimation { duration: 300 } } 
                                                         }
@@ -723,14 +795,14 @@ Item {
                                                             font.family: "JetBrains Mono"
                                                             font.weight: Font.Black
                                                             font.pixelSize: 13
-                                                            color: window.text
+                                                            color: c.on_surface
                                                             text: model.name 
                                                         }
                                                         Text { 
                                                             Layout.alignment: Qt.AlignHCenter
                                                             font.family: "JetBrains Mono"
                                                             font.pixelSize: 10
-                                                            color: window.subtext0
+                                                            color: c.on_surface
                                                             text: model.resW + "x" + model.resH + " @ " + model.rate + "Hz" 
                                                         }
                                                     }
@@ -1021,20 +1093,50 @@ Item {
                             RowLayout {
                                 spacing: 8
 				Text { text: "Scale:"; font.pixelSize: 13; color: col(c.on_surface_variant, "#bbbbbb") }
-				Slider {
+                                Slider {
                                     id: scaleSlider
+                                    Layout.fillWidth: true
                                     from: 0.5
                                     to: 3.0
                                     stepSize: 0.05
-                                
+        
                                     value: window.activeEditIndex >= 0 && monitorsModel.count > 0
                                            ? monitorsModel.get(window.activeEditIndex).scale || 1.0
                                            : 1.0
-                                
+        
                                     onMoved: {
                                         if (window.activeEditIndex >= 0) {
                                             monitorsModel.setProperty(window.activeEditIndex, "scale", value)
                                             delayedLayoutUpdate.restart()
+                                        }
+                                    }
+        
+                                    background: Rectangle {
+                                        implicitHeight: 6
+                                        radius: 3
+                                        color: col(c.surface_container_high, "#2a2a2a")
+        
+                                        Rectangle {
+                                            width: scaleSlider.visualPosition * parent.width
+                                            height: parent.height
+                                            radius: parent.radius
+                                            color: col(c.primary, "#4a90e2")
+                                        }
+                                    }
+        
+                                    handle: Rectangle {
+                                        width: 20
+                                        height: 20
+                                        radius: 10
+                                        color: col(c.primary, "#4a90e2")
+        
+                                        x: scaleSlider.leftPadding
+                                           + scaleSlider.visualPosition * (scaleSlider.availableWidth - width)
+        
+                                        y: (scaleSlider.height - height) / 2
+        
+                                        Behavior on x {
+                                            NumberAnimation { duration: 80; easing.type: Easing.OutQuad }
                                         }
                                     }
                                 }
@@ -1042,120 +1144,124 @@ Item {
                             }
                     
 			    // Lista dostępnych rozdzielczości
-			    ComboBox {
-                               id: resolutionSelector
-                               Layout.fillWidth: true
-                             
-                               property var parsedList: []
-                             
-                               model: parsedList
-                             
-                               // =========================
-                               // TEKST WYBRANEJ WARTOŚCI
-                               // =========================
-                               contentItem: Text {
-                                   text: resolutionSelector.displayText
-                                   color: col(c.on_surface, "#ffffff")   // kolor czcionki
-                                   verticalAlignment: Text.AlignVCenter
-                                   elide: Text.ElideRight
-                                   leftPadding: 8
-                               }
-                             
-                               // =========================
-                               // STRZAŁKA
-                               // =========================
-                               indicator: Text {
-                                   text: "▾"
-                                   color: col(c.on_surface, "#ffffff")
-                                   anchors.right: parent.right
-                                   anchors.rightMargin: 8
-                                   anchors.verticalCenter: parent.verticalCenter
-                               }
-                             
-                               // =========================
-                               // TŁO COMBOBOX
-                               // =========================
-                               background: Rectangle {
-                                   radius: 8                       // zaokrąglenie
-                                   color: col(c.surface_container_high, "#2a2a2a")
-                                   border.width: 1
-                                   border.color: col(c.outline, "#444")
-                               }
-                             
-                               // =========================
-                               // ELEMENTY LISTY
-                               // =========================
-                               delegate: ItemDelegate {
-                                   width: parent.width
-                                   text: modelData ? modelData : ""
-                             
+                            RowLayout {
+                                spacing: 8
+				Text { text: "Resolution:"; font.pixelSize: 13; color: col(c.on_surface_variant, "#bbbbbb") }
+			        ComboBox {
+                                   id: resolutionSelector
+                                   Layout.fillWidth: true
+                                 
+                                   property var parsedList: []
+                                 
+                                   model: parsedList
+                                 
+                                   // =========================
+                                   // TEKST WYBRANEJ WARTOŚCI
+                                   // =========================
                                    contentItem: Text {
-                                       text: modelData ? modelData : ""
-                                       color: highlighted
-                                              ? col(c.on_primary, "#000000")
-                                              : col(c.on_surface, "#ffffff")
+                                       text: resolutionSelector.displayText
+                                       color: col(c.on_surface, "#ffffff")   // kolor czcionki
                                        verticalAlignment: Text.AlignVCenter
                                        elide: Text.ElideRight
+                                       leftPadding: 8
                                    }
-                             
-                                   background: Rectangle {
-                                       radius: 6
-                                       color: highlighted
-                                              ? col(c.primary_container, "#333")
-                                              : col(c.surface_container, "#1e1e1e")
+                                 
+                                   // =========================
+                                   // STRZAŁKA
+                                   // =========================
+                                   indicator: Text {
+                                       text: "▾"
+                                       color: col(c.on_surface, "#ffffff")
+                                       anchors.right: parent.right
+                                       anchors.rightMargin: 8
+                                       anchors.verticalCenter: parent.verticalCenter
                                    }
-                               }
-                             
-                               // =========================
-                               // POPUP TŁO
-                               // =========================
-                               popup: Popup {
-                                   y: resolutionSelector.height
-				   width: resolutionSelector.width
-                             
+                                 
+                                   // =========================
+                                   // TŁO COMBOBOX
+                                   // =========================
                                    background: Rectangle {
-				       radius: 8
-                                       color: col(c.surface_container, "#1e1e1e")
+                                       radius: 8                       // zaokrąglenie
+                                       color: col(c.surface_container_high, "#2a2a2a")
+                                       border.width: 1
                                        border.color: col(c.outline, "#444")
                                    }
-                             
-                                   contentItem: ListView {
-                                       clip: true
-                                       model: resolutionSelector.delegateModel
-                                       currentIndex: resolutionSelector.highlightedIndex
-                                       implicitHeight: Math.min(contentHeight, 150)
-                                       ScrollIndicator.vertical: ScrollIndicator { }
+                                 
+                                   // =========================
+                                   // ELEMENTY LISTY
+                                   // =========================
+                                   delegate: ItemDelegate {
+                                       width: parent.width
+                                       text: modelData ? modelData : ""
+                                 
+                                       contentItem: Text {
+                                           text: modelData ? modelData : ""
+                                           color: highlighted
+                                                  ? col(c.on_primary, "#000000")
+                                                  : col(c.on_surface, "#ffffff")
+                                           verticalAlignment: Text.AlignVCenter
+                                           elide: Text.ElideRight
+                                       }
+                                 
+                                       background: Rectangle {
+                                           radius: 6
+                                           color: highlighted
+                                                  ? col(c.primary_container, "#333")
+                                                  : col(c.surface_container, "#1e1e1e")
+                                       }
                                    }
-                               }
-                             
-                               // =========================
-                               // LOGIKA (BEZ ZMIAN)
-                               // =========================
-                               onActivated: function(index) {
-                                   let list = parsedList
-                                   if (!list || index >= list.length) return
-                             
-                                   let mode = list[index]
-                                   if (!mode) return
-                             
-                                   let match = mode.match(/(\d+)x(\d+)@([\d.]+)/)
-                                   if (!match) return
-                             
-                                   monitorsModel.setProperty(window.activeEditIndex, "resW", parseInt(match[1]))
-                                   monitorsModel.setProperty(window.activeEditIndex, "resH", parseInt(match[2]))
-                                   monitorsModel.setProperty(window.activeEditIndex, "rate", parseFloat(match[3]))
-                             
-                                   delayedLayoutUpdate.restart()
-                               }
-                             
-                               Connections {
-                                   target: window
-                                   function onActiveEditIndexChanged() {
-                                       updateResolutionSelector()
+                                 
+                                   // =========================
+                                   // POPUP TŁO
+                                   // =========================
+                                   popup: Popup {
+                                       y: resolutionSelector.height
+			               width: resolutionSelector.width
+                                 
+                                       background: Rectangle {
+			                   radius: 8
+                                           color: col(c.surface_container, "#1e1e1e")
+                                           border.color: col(c.outline, "#444")
+                                       }
+                                 
+                                       contentItem: ListView {
+                                           clip: true
+                                           model: resolutionSelector.delegateModel
+                                           currentIndex: resolutionSelector.highlightedIndex
+                                           implicitHeight: Math.min(contentHeight, 150)
+                                           ScrollIndicator.vertical: ScrollIndicator { }
+                                       }
                                    }
-                               }
-                            }
-                        }
+                                 
+                                   // =========================
+                                   // LOGIKA (BEZ ZMIAN)
+                                   // =========================
+                                   onActivated: function(index) {
+                                       let list = parsedList
+                                       if (!list || index >= list.length) return
+                                 
+                                       let mode = list[index]
+                                       if (!mode) return
+                                 
+                                       let match = mode.match(/(\d+)x(\d+)@([\d.]+)/)
+                                       if (!match) return
+                                 
+                                       monitorsModel.setProperty(window.activeEditIndex, "resW", parseInt(match[1]))
+                                       monitorsModel.setProperty(window.activeEditIndex, "resH", parseInt(match[2]))
+                                       monitorsModel.setProperty(window.activeEditIndex, "rate", parseFloat(match[3]))
+                                 
+                                       delayedLayoutUpdate.restart()
+                                   }
+                                 
+                                   Connections {
+                                       target: window
+                                       function onActiveEditIndexChanged() {
+                                           updateResolutionSelector()
+                                       }
+                                   }
+                                }
+			    }
+		        }
                     }
                 }
 	    }
@@ -1165,7 +1271,7 @@ Item {
             // =================================================
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 250
+                Layout.preferredHeight: 200
                 radius: 12
                 color: col(c.surface_container, "#1c1c1c")
    
@@ -1216,8 +1322,30 @@ Item {
                         }
    
                         Button {
-                            text: "Browse"
+                            Layout.preferredWidth: 70
                             onClicked: folderDialog.open()
+            
+                            hoverEnabled: true
+                            property real pressScale: down ? 0.96 : (hovered ? 1.02 : 1.0)
+                            scale: pressScale
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+            
+                            contentItem: Text {
+                                text: "Browse"
+                                color: col(c.on_surface, "#0af")
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                font.pixelSize: 14
+                            }
+            
+                            background: Rectangle {
+                                radius: 10
+                                color: col(c.primary_container, "#222")
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+                            }
                         }
                     }
    
@@ -1264,7 +1392,8 @@ Item {
                                                 `swww img "${img}" --outputs "${output}" --transition-type grow --transition-duration 0.3 || awww img "${img}" -o "${output}"`
                                             ]
           
-                                            setWallpaperProc.running = true
+					    setWallpaperProc.running = true
+                                            Theme.changeWallpaper(img)
                                         }
                                     }
                                 }
@@ -1288,6 +1417,238 @@ Item {
                         saveWallpaperDir.running = true
               
                         startWallpaperScan()
+                    }
+                }
+	    }
+
+            // =================================================
+            // SCREEN INPUT DEVICES
+            // =================================================
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: (screenInputDevicesModel.count * 44) + 80
+                radius: 12
+                color: col(c.surface_container, "#1c1c1c")
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 10
+                    id: inputDevicesSection
+            
+                    Text {
+                        text: "Input Devices"
+                        font.pixelSize: 14
+                        color: col(c.on_surface, "#ffffff")
+                        opacity: 0.9
+                    }
+            
+                    Repeater {
+                        model: screenInputDevicesModel
+
+                        delegate: Rectangle {
+                            width: parent.width
+                            height: 44
+                            radius: 8
+                            color: col(c.surface_container_high, "#2a2a2a")
+
+                            Row {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 12
+
+                                // =========================
+                                // DEVICE NAME
+                                // =========================
+                                Text {
+                                    text: name
+                                    width: 200
+                                    color: col(c.on_surface, "#ffffff")
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+            
+                                // =========================
+                                // MONITOR SELECT (STYLED)
+                                // =========================
+                                ComboBox {
+                                    id: combo
+                                    width: 150
+
+                                    model: ["Off"]
+            
+                                    // =========================
+                                    // TEXT
+                                    // =========================
+                                    contentItem: Text {
+                                        text: combo.displayText
+                                        color: col(c.on_surface, "#ffffff")
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideRight
+                                        leftPadding: 8
+                                    }
+
+                                    // =========================
+                                    // ARROW
+                                    // =========================
+                                    indicator: Text {
+                                        text: "▾"
+                                        color: col(c.on_surface, "#ffffff")
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+
+                                    // =========================
+                                    // BACKGROUND
+                                    // =========================
+                                    background: Rectangle {
+                                        radius: 8
+                                        color: col(c.surface_container_high, "#2a2a2a")
+                                        border.width: 1
+                                        border.color: col(c.outline, "#444")
+                                    }
+
+                                    // =========================
+                                    // DELEGATE
+                                    // =========================
+                                    delegate: ItemDelegate {
+                                        width: parent.width
+                                        text: modelData ? modelData : ""
+
+                                        contentItem: Text {
+                                            text: modelData ? modelData : ""
+                                            color: highlighted
+                                                   ? col(c.on_primary, "#000000")
+                                                   : col(c.on_surface, "#ffffff")
+                                            verticalAlignment: Text.AlignVCenter
+                                            elide: Text.ElideRight
+                                        }
+
+                                        background: Rectangle {
+                                            radius: 6
+                                            color: highlighted
+                                                   ? col(c.primary_container, "#333")
+                                                   : col(c.surface_container, "#1e1e1e")
+                                        }
+                                    }
+
+                                    // =========================
+                                    // POPUP
+                                    // =========================
+                                    popup: Popup {
+                                        y: combo.height
+                                        width: combo.width
+            
+                                        background: Rectangle {
+                                            radius: 8
+                                            color: col(c.surface_container, "#1e1e1e")
+                                            border.color: col(c.outline, "#444")
+                                        }
+
+                                        contentItem: ListView {
+                                            clip: true
+                                            model: combo.delegateModel
+                                            currentIndex: combo.highlightedIndex
+                                            implicitHeight: Math.min(contentHeight, 150)
+                                            ScrollIndicator.vertical: ScrollIndicator { }
+                                        }
+                                    }
+
+                                    // =========================
+                                    // LOGIKA 
+                                    // =========================
+                                    Component.onCompleted: {
+                                        rebuildModel()
+                                        updateSelection()
+                                    }
+
+				    onModelChanged: {
+				        updateSelection()
+				    }
+
+                                    function rebuildModel() {
+                                        let list = ["Off"]
+            
+                                        for (let i = 0; i < monitorsModel.count; i++) {
+                                            let m = monitorsModel.get(i)
+                                            if (!m) continue
+                                            list.push(m.description)
+                                        }
+
+                                        combo.model = list
+                                    }
+
+                                    function updateSelection() {
+                                        if (!model || !name) {
+                                            combo.currentIndex = 0
+                                            return
+                                        }
+
+                                        let mapped = Monitors.getMappedMonitor(name)
+            
+                                        for (let i = 0; i < combo.model.length; i++) {
+                                            if (combo.model[i] === mapped) {
+                                                combo.currentIndex = i
+                                                return
+                                            }
+                                        }
+
+                                        combo.currentIndex = 0
+                                    }
+
+                                    Connections {
+                                        target: Monitors
+                                        function onInputDeviceMapChanged() {
+                                            combo.updateSelection()
+                                        }
+                                    }
+
+                                    Connections {
+                                        target: monitorsModel
+                                        function onCountChanged() {
+                                            combo.rebuildModel()
+                                            combo.updateSelection()
+                                        }
+                                    }
+onActivated: {
+    if (!model || !name) return
+
+    let selected = combo.currentText
+
+    // =========================
+    // 🔥 1. natychmiastowy update UI (FIX)
+    // =========================
+    let newMap = Object.assign({}, Monitors.inputDeviceMap)
+    newMap[name] = selected
+    Monitors.inputDeviceMap = newMap
+
+    // =========================
+    // 2. zapis do pliku
+    // =========================
+    saveInputMappingProc.device = name
+    saveInputMappingProc.description = selected
+    saveInputMappingProc.running = true
+
+    // =========================
+    // 🔥 3. odpal Twój skrypt
+    // =========================
+    applyInputProc.command = [
+        "bash",
+        "-c",
+        "/home/quantum/.config/hypr/scripts/apply-input-mapping.sh"
+    ]
+    applyInputProc.running = true
+
+    // =========================
+    // 4. reload (opcjonalnie)
+    // =========================
+    Monitors.reloadInputDeviceMap()
+}
+
+                                }
+                            }
+                        }
                     }
                 }
             }

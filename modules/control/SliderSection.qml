@@ -2,6 +2,7 @@ import QtQuick 2.15
 import QtQuick.Layouts 1.15
 import qs.components
 import qs.services as Services
+import "../../colors" as ColorsModule
 
 ColumnLayout {
     Layout.fillWidth: true
@@ -23,31 +24,34 @@ ColumnLayout {
 	visible: false
     }
 
-    // =====================
-    // Screen Brightness
-    // =====================
-    SliderRow {
-        icon: "󰃞 "
-        label: "Screen Brightness"
-        value: Services.System.brightness
-        onMoved: Services.System.setBrightness(value)
-        showValue: true
-	valueSuffix: "%"
-	visible: Services.System.canSetBrightness
-    }
-
-    // =====================
-    // Keyboard Backlight
-    // =====================
-    SliderRow {
-        icon: "󰌌 "
-        label: "Keyboard Backlight"
-        value: Services.System.backlight
-        onMoved: Services.System.setBacklight(value)
-        showValue: true
-	valueSuffix: "%"
-	visible: Services.System.canSetBacklight
-    }
+//    // =====================
+//    // Screen Brightness
+//    // =====================
+//    SliderRow {
+//        icon: "󰃞 "
+//        label: "Screen Brightness"
+//        value: Services.System.brightness
+//        onMoved: Services.System.setBrightness(value)
+//        showValue: true
+//	valueSuffix: "%"
+//	visible: Services.System.canSetBrightness
+//    }
+//
+//    // =====================
+//    // Keyboard Backlight
+//    // =====================
+//    SliderRow {
+//        icon: "󰌌 "
+//        label: "Keyboard Backlight"
+//        value: Services.System.keyboardBrightness
+//        onMoved: Services.System.setKeyboardBacklight(value)
+//        showValue: true
+//	valueSuffix: ""
+//	visible: Services.System.canSetKeyboardBacklight
+//	from: 0
+//        to: Services.System.keyboardMaxBrightness
+//        stepSize: 1
+//    }
 
     // =====================
     // Color Temperature
@@ -77,14 +81,14 @@ ColumnLayout {
             width: 40
             height: 40
             radius: 6
-            color: "#666"
+            color: ColorsModule.Colors.surface_container_high
             Layout.alignment: Qt.AlignVCenter
 
             Text {
                 anchors.centerIn: parent
                 text: "󰁯 "
                 font.pixelSize: 14
-                color: "white"
+                color: ColorsModule.Colors.on_surface
             }
 
             MouseArea {

@@ -1,19 +1,23 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
-import qs.components
-import Quickshell.Io
-import Quickshell.Wayland
+import qs.services as Services
+import "../../colors" as ColorsModule
 
 Item {
     id: systemPanel
     property bool opened: false
-    property int currentTab: 0
-    focus: true
-    implicitWidth: 550
-    implicitHeight: opened ? 200 : 0
-    anchors.horizontalCenter: parent.horizontalCenter
+    property int systemPanelWidth: 450
+    property var c: ColorsModule.Colors
 
-    Behavior on implicitHeight {
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.topMargin: 40
+
+    width: opened ? systemPanelWidth : 0
+
+    Behavior on width {
         NumberAnimation {
             duration: 260
             easing.type: Easing.OutCubic
@@ -22,67 +26,58 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "transparent"
+        color: "#22000000"
+        radius: 18
+        clip: true
 
-        MouseArea {
+        ColumnLayout {
             anchors.fill: parent
-            onClicked: systemPanel.opened = false
-        }
-    }
+            anchors.margins: 18
+            spacing: 18
 
-    FocusScope {
-        anchors.fill: parent
-        focus: systemPanel.opened
+            // =========================
+            // SYSTEM SECTION
+            // =========================
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: content.height
+                color: "transparent"
 
-        Keys.onEscapePressed: systemPanel.opened = false
+                Column {
+                    id: content
+                    width: parent.width
+                    spacing: 10
 
-        Popout {
-            anchors.fill: parent
-            alignment: 0
+                    RowLayout {
+                        width: parent.width
 
-            Column {
-                anchors.fill: parent
-                spacing: 8
+                        Text {
+                            text: "System"
+                            color: c.primary
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                        }
 
-                Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 8
-
-                    TabButton {
-                        text: "System"
-                        active: currentTab === 0
-                        onClicked: currentTab = 0
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: c.outline
+                            opacity: 0.4
+                        }
                     }
 
-                    TabButton {
-                        text: "Screen"
-                        active: currentTab === 1
-                        onClicked: currentTab = 1
-                    }
-                }
+                    Column {
+                        width: parent.width
+                        spacing: 6
 
-                Loader {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    sourceComponent: currentTab === 0 ? systemTab : screenTab
+                        Text { text: "OS: " + Services.System.os; color: c.on_surface }
+                        Text { text: "Kernel: " + Services.System.kernel; color: c.on_surface }
+                        Text { text: "Uptime: " + Services.System.uptime; color: c.on_surface }
+                        Text { text: "WM: " + Services.System.wm; color: c.on_surface }
+                    }
                 }
             }
-        }
-    }
 
-    Component {
-        id: systemTab
-        SystemGraphs { }
-    }
-
-    Component {
-        id: screenTab
-        ScreenTools { }
-    }
-
-    IpcHandler {
-        target: "systemPanel"
-        function toggle(): void {
-            systemPanel.opened = !systemPanel.opened
         }
     }
 }

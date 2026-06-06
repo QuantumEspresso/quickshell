@@ -55,8 +55,11 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-		    onClicked: Services.Network.toggleWifi()
+		    cursorShape: Qt.PointingHandCursor
+		    onClicked: {
+                        Services.Network.toggleWifi()
+                        Qt.callLater(() => Services.Network.rescan())
+                    }
                 }
             }
 

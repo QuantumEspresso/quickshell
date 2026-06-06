@@ -180,8 +180,15 @@ Item {
             "DATA": root.markdown
         }
 
-        stdout: StdioCollector {
-            onStreamFinished: root.html = text
+	stdout: StdioCollector {
+            onStreamFinished: {
+                // dodajemy CSS inline do podkreślenia code blocków
+                root.html = "<style>" +
+                    "code { font-family: monospace; background-color: #2c2c2c; padding: 2px 4px; border-radius: 4px; color: #0af; }" +
+                    "pre { font-family: monospace; background-color: #2c2c2c; padding: 8px; border-radius: 8px; color: #0af; overflow-x: auto; }" +
+                    "body { color: " + root.c.on_surface + "; }" +
+                "</style>" + text
+            }
         }
     }
 }

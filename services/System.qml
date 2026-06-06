@@ -8,29 +8,81 @@ Singleton {
     id: stats
 
     property string username: ""
+    property string os: ""
+    property string kernel: ""
+    property string wm: ""
 
-    property real cpu: 0
-    property real ram: 0
     property real disk: 0
-    property real temp: 0
     property string uptime: "0h 0m"
 
+    // CPU data
+    property string cpuName: ""
+    property real cpu: 0
+    property real temp: 0
+    property var cpuHistory: []
+    property var topCpu: []
+    readonly property string cpuColor: tempColor(temp)
+
+    // Memory data
+    property real ram: 0
     property string ramPretty: "0 / 0 GB"
+    property real swap: 0
+    property string swapPretty: "0 / 0 GB"
+    property var topMem: []
+
+    // GPU
     property real gpu: NaN
     property real gpuTemp: NaN
-    readonly property string cpuColor: tempColor(temp)
     readonly property string gpuColor: tempColor(gpuTemp)
+    property var topGpu: []
+    property real vram: 0
+    property string vramPretty: "0 / 0 GB"
+    property var gpuHistory: []
+    property string gpuName: ""
 
-    property bool canSetBrightness: false
+    // NETWORK
+    property string netInterface: ""
+    property string localIp: ""
+    property string externalIp: ""
+    property string macAddress: ""
+
+    property real downSpeed: 0
+    property real upSpeed: 0
+
+    property var downHistory: []
+    property var upHistory: []
+
+    property var topNet: []
+    property var topNetDown: []
+    property var topNetUp: []
+
+    // Screen brightness control
+    property bool canSetBrightness: brightness > 0 || false
     property int brightness: 0
     property int lastBrightness: -1
-    property bool canSetBacklight: false
+    property bool canSetKeyboardBacklight: keyboardMaxBrightness > 0
+    property int keyboardBrightness: 0
+    property int keyboardMaxBrightness: 0
     property int colorTemperature: 6500
 
     function tempColor(temp) {
         if (temp < 50) return "#89b4fa";   // niebieski
         if (temp < 75) return "#fab387";   // pomarańczowy
         return "#f38ba8";                  // czerwony
+    }
+    
+    function setKeyboardBacklight(v) {
+        const val = Math.round(v)
+
+        setKeyboardProc.command = [
+            "brightnessctl",
+            "-d", "tpacpi::kbd_backlight",
+            "set",
+            val.toString()
+        ]
+
+        setKeyboardProc.running = true
+        stats.keyboardBrightness = val
     }
 
     Timer {
@@ -39,13 +91,15 @@ Singleton {
         repeat: true
         onTriggered: {
             cpuProc.running = true
-            ramProc.running = true
+	    ramProc.running = true
             diskProc.running = true
             tempProc.running = true
 	    uptimeProc.running = true
 	    gpuProc.running = true
 	    gpuTempProc.running = true
 	    getTempProc.running = true
+	    keyboardBrightnessProc.running = true
+            keyboardMaxProc.running = true
         }
     }
 
@@ -54,9 +108,44 @@ Singleton {
         running: true
         repeat: true
         onTriggered: {
-            brightnessProc.running = true
+	    brightnessProc.running = true
         }
     }
+
+    Process {
+        id: osProc
+        command: ["bash","-c",
+            "grep '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '\"'"
+        ]
+        running: true
+ 
+        stdout: StdioCollector {
+            onStreamFinished: stats.os = text.trim()
+        }
+    }
+
+    Process {
+        id: kernelProc
+        command: ["uname","-r"]
+        running: true
+ 
+        stdout: StdioCollector {
+            onStreamFinished: stats.kernel = text.trim()
+        }
+    }
+
+    Process {
+        id: wmProc
+        command: ["bash","-c",
+            "echo ${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-Hyprland}}"
+        ]
+        running: true
+ 
+        stdout: StdioCollector {
+            onStreamFinished: stats.wm = text.trim()
+        }
+    }
+
 
     Process {
        id: userProc
@@ -73,8 +162,15 @@ Singleton {
     Process {
         id: cpuProc
         command: ["bash","-c","top -bn1 | grep 'Cpu(s)' | awk '{print 100-$8}'"]
-        stdout: StdioCollector {
-            onStreamFinished: stats.cpu = parseFloat(text) || 0
+	stdout: StdioCollector {
+	    onStreamFinished: {
+                let val = parseFloat(text) || 0
+                stats.cpu = val
+   
+                stats.cpuHistory.push(val)
+                if (stats.cpuHistory.length > 60)
+                    stats.cpuHistory.shift()
+            }
         }
     }
 
@@ -137,7 +233,7 @@ Singleton {
     Process {
         id: tempProc
         command: ["bash","-c",
-            "sensors | awk '/Tctl:|Tdie:|Package id 0:/ {print $2; exit}' | sed 's/+//;s/°C//' || echo '0'"
+            "sensors | awk '/CPU:/ {print $2}' | tr -d '+°C'"
         ]
         stdout: StdioCollector {
             onStreamFinished: stats.temp = parseFloat(text) || 0
@@ -187,23 +283,60 @@ Singleton {
     }
 
     Process { id: setBrightnessProc }
+    
+// =====================
+// Keyboard backlight detection + control
+// =====================
 
 Process {
-    id: getTempProc
-    command: ["hyprctl", "hyprsunset", "temperature"]
+    id: keyboardBrightnessProc
+    command: [
+        "bash", "-c",
+        "brightnessctl -d tpacpi::kbd_backlight get"
+    ]
 
     stdout: StdioCollector {
         onStreamFinished: {
-            const match = text.trim().match(/\d+/)
-            if (match)
-                stats.colorTemperature = parseInt(match[0])
+            let v = parseInt(text) || 0
+            stats.keyboardBrightness = v
         }
     }
 }
 
+Process {
+    id: keyboardMaxProc
+    command: [
+        "bash", "-c",
+        "brightnessctl -d tpacpi::kbd_backlight max"
+    ]
+
+    stdout: StdioCollector {
+        onStreamFinished: {
+            let v = parseInt(text) || 0
+            stats.keyboardMaxBrightness = v
+        }
+    }
+}
+
+Process { id: setKeyboardProc }
+
+    Process {
+        id: getTempProc
+        command: ["hyprctl", "hyprsunset", "temperature"]
+ 
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const match = text.trim().match(/\d+/)
+                if (match)
+                    stats.colorTemperature = parseInt(match[0])
+            }
+        }
+    }
+
     Process {
         id: setTempProc
     }
+
     function setColorTemperature(temp) {
         const t = Math.round(temp)
         stats.colorTemperature = t
@@ -212,5 +345,6 @@ Process {
 	getTempProc.stop()
         getTempProc.start()
     }
+
 
 }

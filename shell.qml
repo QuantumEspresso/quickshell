@@ -2,13 +2,13 @@ import QtQuick
 import Quickshell
 import qs.modules.network
 import qs.modules.volume
+import qs.modules.battery
 import qs.modules.control
 import qs.modules.utilities
 import qs.modules.calendar
 import qs.modules.media
 import qs.modules.bar
 import qs.modules.system
-import qs.modules.switcher
 import Quickshell.Io
 import qs.services as Services
 import qs.components
@@ -53,7 +53,6 @@ ShellRoot {
             bottom: true
         }
     }
-    WindowSwitcher{}
     Visualizer {
         id: visBottom
         anchorBottom: true
@@ -89,9 +88,33 @@ ShellRoot {
             }
             focus: true
         }
-        SystemPanel {
-            id: systemPanel
+
+        PanelWindow {
+            id: systemPanelLoader
+            visible: false
+
+            WlrLayershell.layer: WlrLayer.Bottom
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            exclusionMode: ExclusionMode.Ignore
+
+            color: "transparent"
+            focusable: false
+
+            anchors {
+                right: true
+                top: true
+                bottom: true
+            }
+
+            implicitWidth: systemPanel.opened ? 450 : 0
+            implicitHeight: screen.height
+
+            SystemPanel {
+                id: systemPanel
+                anchors.fill: parent
+            }
         }
+
         WallhavenWrapper{
             id: wallhavenWrapper
         }
@@ -115,6 +138,17 @@ ShellRoot {
                 id: volumePanel
             }
         }
+        
+        Loader {
+            id: batteryPanelLoader
+            active: false
+            anchors.top: parent.top
+	    anchors.right: parent.right
+	    anchors.topMargin: 40
+            sourceComponent: BatteryPanel {
+                id: batteryPanel
+            }
+        }
 
         OsdWindow {}
 
@@ -130,9 +164,6 @@ ShellRoot {
 
         TopBar{
             id: topBar
-        }
-        NotesDrawer{
-            id: notesDrawer
         }
 
         MouseArea {
@@ -182,15 +213,6 @@ ShellRoot {
             }
             focus: true
         }
-        Loader {
-            active: false
-            id: chatLoader
-            anchors.centerIn: parent
-            sourceComponent: OllamaChat{
-                id: ollamaChat
-            }
-            focus: true
-        }
 
         property bool altHeld: false
 
@@ -199,7 +221,7 @@ ShellRoot {
                 item: mediaPanelLoader.active ? mediaPanelLoader : null
             }
             Region{
-                item: systemPanel
+                item: systemPanelLoader.active ? systemPanelLoader : null
             }
             Region{
                 item: topBar
@@ -210,11 +232,8 @@ ShellRoot {
             Region {
                 item: volumePanelLoader.item ? volumePanelLoader.item : null
             }
-            Region{
-                item: notesDrawer.opened ? notesDrawer : null
-            }
-            Region{
-                item: notesDrawerTrigger
+            Region {
+                item: batteryPanelLoader.item ? batteryPanelLoader.item : null
             }
             Region{
                 item: controlCenterLoader.active ? controlCenterLoader : null
@@ -223,16 +242,7 @@ ShellRoot {
                 item: utilitiesMenuLoader.active ? utilitiesMenuLoader : null
             }
             Region{
-                item: launcherTrigger
-            }
-            Region {
-                item: launcherWindow.isOpen ? launcherWindow : null
-            }
-            Region{
                 item: wallpaper.visible ? wallpaper : null
-            }
-            Region{
-                item: chatLoader.active ? chatLoader : null
             }
         }
     }
@@ -322,6 +332,30 @@ ShellRoot {
     }
 
     IpcHandler {
+        target: "systemPanel"
+ 
+        function changeVisible(): void {
+            systemPanel.opened = !systemPanel.opened
+            systemPanelLoader.visible = systemPanel.opened
+        }
+    }
+    
+    IpcHandler {
+        target: "batteryPanel"
+
+        function changeVisible(): void {
+            if (!batteryPanelLoader.active)
+                batteryPanelLoader.active = true
+
+            if (!batteryPanelLoader.item)
+                return
+
+            batteryPanelLoader.item.opened =
+                !batteryPanelLoader.item.opened
+        }
+    }
+
+    IpcHandler {
         target: "controlCenter"
         function changeVisible(): void {
             if (!controlCenterLoader.active) {
@@ -346,30 +380,10 @@ ShellRoot {
     }
 
     IpcHandler {
-        target: "ollamaChat"
-        function changeVisible(): void {
-            if (!chatLoader.active) {
-                chatLoader.active = true
-                chatLoader.item.visible = true
-            } else {
-                chatLoader.item.visible = !chatLoader.item.visible
-            }
-        }
-    }
-
-    IpcHandler {
         target: "visBottom"
 
         function toggle() {
             visBottom.visible = !visBottom.visible
-        }
-    }
-
-    IpcHandler {
-        target: "launcherWindow"
-
-        function toggle() {
-            launcherWindow.toggle()
         }
     }
 
@@ -385,4 +399,5 @@ ShellRoot {
         interval: 300
         onTriggered: windowSwitcherLoader.active = false
     }
+
 }

@@ -51,14 +51,14 @@ ColumnLayout {
 
         ToggleTile {
             label: "Weather"
-	    icon: "󰖐 "
+	    icon: "󰖐"
 	    active: currentTab === 2
 	    onClicked: currentTab = 2
         }
 
         ToggleTile {
             label: "Timer"
-            icon: "󰀠 "
+            icon: "󰀠"
 	    active: currentTab === 3
 	    onClicked: currentTab = 3
         }

@@ -20,17 +20,20 @@ Singleton {
         id: scanProc
 
         command: [
-            "/usr/bin/bash", "-c",
+            "bash", "-c",
             `
 dirs=(
-/usr/share/applications
-/usr/local/share/applications
+/run/current-system/sw/share/applications
+$HOME/.nix-profile/share/applications
+/etc/profiles/per-user/$USER/share/applications
 $HOME/.local/share/applications
+/var/lib/flatpak/exports/share/applications
+$HOME/.local/share/flatpak/exports/share/applications
 )
 
 for d in "\${dirs[@]}"; do
   [ -d "$d" ] || continue
-  find "$d" -name "*.desktop"
+  find "$d" -name "*.desktop" 2>/dev/null
 done | while read file; do
 
 name=$(grep -m1 "^Name=" "$file" | cut -d= -f2-)
@@ -45,7 +48,8 @@ hidden=$(grep -m1 "^Hidden=" "$file" | cut -d= -f2-)
 [ -z "$name" ] && continue
 [ -z "$exec" ] && continue
 
-exec=$(echo "$exec" | sed 's/ *%[fFuUdDnNickvm]//g')
+# usuń argumenty desktop file typu %u %f
+exec=$(echo "$exec" | sed -E 's/%[a-zA-Z]//g')
 
 printf '%s|%s|%s|%s\n' "$name" "$icon" "$exec" "$terminal"
 
@@ -73,12 +77,13 @@ done
                 }
 
                 // sort alphabetically
-                list.sort((a,b)=>a.name.localeCompare(b.name))
+                list.sort((a, b) => a.name.localeCompare(b.name))
 
                 root.apps = list
                 root.ready = true
             }
         }
     }
+
     Component.onCompleted: refresh()
 }

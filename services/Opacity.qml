@@ -9,7 +9,7 @@ Singleton {
     id: root
 
     property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR")
-    property string pidFile: runtimeDir + "/hypr-opaque-watcher.pid"
+    property string stateFile: runtimeDir + "/hypr-opaque-toggle"
     property string toggleScript: Quickshell.env("HOME") + "/.config/hypr/scripts/toggle_opacity.sh"
 
     property bool enabled: false
@@ -30,10 +30,10 @@ Singleton {
         onExited: root.refresh()
     }
 
-    // --- sprawdzanie PID ---
+    // --- sprawdzanie stanu ---
     Process {
         id: checkProc
-        command: ["bash", "-c", "[ -s '" + root.pidFile + "' ] && echo 1 || echo 0"]
+        command: ["bash", "-c", "[ -f '" + root.stateFile + "' ] && echo 1 || echo 0"]
 
         stdout: StdioCollector {
             onStreamFinished: {
@@ -42,7 +42,6 @@ Singleton {
         }
 
         onExited: {
-            // fallback
             if (exitCode !== 0)
                 root.enabled = false
         }

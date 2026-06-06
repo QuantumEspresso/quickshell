@@ -14,7 +14,7 @@ Rectangle {
     implicitWidth: 520
     property int popoutHeight: 320
     implicitHeight: popoutHeight
-    visible: implicitHeight > 1
+    visible: true
     y: opened ? 0 : -(popoutHeight + 20)  // Use dynamic height instead of fixed -340
     anchors.horizontalCenter: parent.horizontalCenter
 

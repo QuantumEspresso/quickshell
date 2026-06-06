@@ -2,6 +2,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.services as Services
 
 QtObject {
     id: root
@@ -25,7 +26,6 @@ QtObject {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.status = text.trim()
-
                 if (root.status === "Playing")
                     getTrackId.running = true
             }
@@ -41,10 +41,9 @@ QtObject {
                 let parts = raw.split("/")
                 let id = parts[parts.length - 1]
 
-                // Only fetch if track changed
                 if (root.trackid !== id) {
                     root.trackid = id
-                    root.loaded = false // Reset while fetching
+                    root.loaded = false
                     root.fetchLyrics(id)
                     console.log("Track ID:", id)
                 }
@@ -53,32 +52,73 @@ QtObject {
     }
 
     function fetchLyrics(trackId) {
-        if (!trackId || trackId === "")
-            return;
+        let artist = encodeURIComponent(Services.Media.artist)
+        let title  = encodeURIComponent(Services.Media.title)
 
-        let xhr = new XMLHttpRequest();
-        xhr.open("GET", "http://localhost:8080/?trackid=" + trackId);
+        if (!artist || !title)
+            return
+
+        let xhr = new XMLHttpRequest()
+        xhr.open("GET",
+            "https://lrclib.net/api/get?artist_name=" + artist + "&track_name=" + title
+        )
 
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200) {
                     try {
-                        let data = JSON.parse(xhr.responseText);
-                        root.lines = data.lines || [];
-                        root.loaded = true;
-                        console.log("Lyrics loaded:", root.lines.length, "lines");
+                        let data = JSON.parse(xhr.responseText)
+
+                        // Wybieramy najpierw synchronizowane napisy, jeśli są
+                        if (data.syncedLyrics) {
+                            root.lines = parseLRC(data.syncedLyrics)
+                        } else if (data.plainLyrics) {
+                            // fallback na zwykłe napisy
+                            root.lines = [{
+                                startTimeMs: "0",
+                                words: data.plainLyrics.replace(/\n/g, " ")
+                            }]
+                        } else {
+                            root.lines = []
+                        }
+
+                        root.loaded = true
                     } catch(e) {
-                        console.log("Lyrics parse error:", e);
-                        root.loaded = false;
+                        root.lines = []
+                        root.loaded = true
+                        console.error("Error parsing lyrics:", e)
                     }
                 } else {
-                    console.log("HTTP error:", xhr.status);
-                    root.loaded = false;
+                    root.lines = []
+                    root.loaded = true
+                    console.error("Lyrics fetch failed:", xhr.status)
                 }
             }
         }
 
-        xhr.send();
+        xhr.send()
+    }
+
+    function parseLRC(lrc) {
+        let result = []
+        let lines = lrc.split("\n")
+
+        for (let line of lines) {
+            let match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/)
+            if (!match)
+                continue
+
+            let min = parseInt(match[1])
+            let sec = parseFloat(match[2])
+            let text = match[3].trim()
+
+            result.push({
+                startTimeMs: Math.floor((min * 60 + sec) * 1000).toString(),
+                words: text
+            })
+        }
+
+        return result
     }
 
     function currentLine(positionSeconds) {
