@@ -243,21 +243,23 @@ Item {
     function applyConfiguration() {
         for (let i = 0; i < monitorsModel.count; i++) {
             let m = monitorsModel.get(i)
- 
+
             let x = Math.round(m.uiX / uiScale) + originalLayoutOriginX
             let y = Math.round(m.uiY / uiScale) + originalLayoutOriginY
- 
+
             let cmd
- 
+
             if (m.disabled) {
-                cmd = `${m.name},disable`
+                cmd = `hl.monitor({ output = "${m.name}", enabled = false })`
             } else {
                 cmd =
-                    `${m.name},${m.resW}x${m.resH}@${Math.round(m.rate)},` +
-                    `${x}x${y},${m.scale}`
+                    `hl.monitor({ output = "${m.name}", ` +
+                    `mode = "${m.resW}x${m.resH}@${Math.round(m.rate)}", ` +
+                    `position = "${x}x${y}", ` +
+                    `scale = ${m.scale} })`
             }
- 
-            applyProc.command = ["hyprctl", "keyword", "monitor", cmd]
+
+            applyProc.command = ["hyprctl", "eval", cmd]
             applyProc.running = true
         }
     }
