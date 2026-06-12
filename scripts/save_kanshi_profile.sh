@@ -147,7 +147,7 @@ generate_profile_block() {
                 "\n            }"
             ) | join(",\n")
         ) +
-        "\n        }\n    }"
+        "\n        }\n    },"
     '
 }
 
