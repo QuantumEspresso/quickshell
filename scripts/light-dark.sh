@@ -19,11 +19,11 @@ to_entries[]
 | .key
 ')
 
-# aktualna tapeta z swww
+# aktualna tapeta z awww
 if [ -n "$IMAGE" ]; then
     WALLPAPER="$IMAGE"
 else
-    WALLPAPER=$(strings ~/.cache/swww/"$MONITOR" 2>/dev/null \
+    WALLPAPER=$(strings ~/.cache/awww/*/"$MONITOR" 2>/dev/null \
       | grep -E '^/.+\.[^/]+$' \
       | head -n1)
 fi

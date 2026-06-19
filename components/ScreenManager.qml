@@ -273,7 +273,7 @@ Item {
         wallpaperScan.command = [
             "bash",
             "-c",
-            `find "${window.wallpaperDir}" -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" -o -iname "*.webp" \\)`
+            `find "${window.wallpaperDir}" -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.gif" \\)`
         ]
  
         wallpaperScan.running = true
@@ -1309,7 +1309,7 @@ Item {
                                 border.color: col(c.outline, "#444")
                             }
                
-			    onEditingFinished: {
+			                onEditingFinished: {
                                 window.wallpaperDir = text
                                 saveWallpaperPath()
                                 startWallpaperScan()
@@ -1372,15 +1372,15 @@ Item {
                                     color: "#111"
                                     clip: true
    
-                                    Image {
+                                    AnimatedImage {
                                         anchors.fill: parent
                                         source: "file://" + model.path
-                                        fillMode: Image.PreserveAspectCrop
+                                        fillMode: AnimatedImage.PreserveAspectCrop
                                         asynchronous: true
                                     }
    
                                     MouseArea {
-					anchors.fill: parent
+					                    anchors.fill: parent
                                         onClicked: {
                                             let monitor = monitorsModel.get(window.activeEditIndex)
                                             if (!monitor) return
@@ -1394,7 +1394,7 @@ Item {
                                                 `swww img "${img}" --outputs "${output}" --transition-type grow --transition-duration 0.3 || awww img "${img}" -o "${output}"`
                                             ]
           
-					    setWallpaperProc.running = true
+					                        setWallpaperProc.running = true
                                             Theme.changeWallpaper(img)
                                         }
                                     }
@@ -1413,8 +1413,8 @@ Item {
                         wallpaperPathField.text = window.wallpaperDir
               
                         saveWallpaperDir.command = [
-			    "bash","-c",
-			    `mkdir -p "$(dirname "${window.wallpaperConfig}")"; echo "${window.wallpaperDir}" > "${window.wallpaperConfig}"`
+			                "bash","-c",
+			                `mkdir -p "$(dirname "${window.wallpaperConfig}")"; echo "${window.wallpaperDir}" > "${window.wallpaperConfig}"`
                         ]
                         saveWallpaperDir.running = true
               
@@ -1565,9 +1565,9 @@ Item {
                                         updateSelection()
                                     }
 
-				    onModelChanged: {
-				        updateSelection()
-				    }
+				                    onModelChanged: {
+				                        updateSelection()
+				                    }
 
                                     function rebuildModel() {
                                         let list = ["Off"]
